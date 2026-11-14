@@ -13,6 +13,9 @@ const BLOCK_TAGS = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'BLOCKQUOTE', 'H1', 'H
 const NEVER_TAGS = new Set(['SCRIPT', 'STYLE', 'IMG', 'PICTURE', 'VIDEO', 'AUDIO', 'SVG', 'CANVAS', 'IFRAME', 'OBJECT', 'BUTTON', 'SELECT',
   'TEXTAREA', 'INPUT', 'NOSCRIPT', 'TEMPLATE', 'CUSTOM-STYLE']);
 
+/** A speaker tag the model writes before a line: [v:Guy]"…" — hidden on the page, read by the player. */
+export const SPEAKER_TAG = /\[v:([^\]\n]{1,40})\]\s?/g;
+
 export const parseList = value => String(value ?? '').split(/[,\n]/).map(item => item.trim()).filter(Boolean);
 
 /**
@@ -24,7 +27,7 @@ export function readDom(root, options = {}) {
   const tags = new Set(parseList(options.tags).map(tag => tag.replace(/[<>/]/g, '').toUpperCase()));
   const selectors = parseList(options.selectors);
   const italic = options.asterisk === 'narration' ? KIND.NARRATION : KIND.THOUGHT;
-  const doc = { text: '', kinds: [], nodes: [], blocks: [], rules: [] };
+  const doc = { text: '', kinds: [], nodes: [], blocks: [], rules: [], speakers: [] };
   let open = null;
   const closeBlock = end => {
     if (!open) return;
@@ -60,6 +63,8 @@ export function readDom(root, options = {}) {
       const tag = child.tagName;
       if (tag === 'BR') { boundary(); continue; }
       if (tag === 'HR') { boundary(); doc.rules.push(doc.text.length); continue; }
+      // A hidden speaker mark (made from [v:Name] by the player): the lines after it in this block are theirs.
+      if (child.hasAttribute('data-sv-who')) { doc.speakers.push({ at: doc.text.length, name: String(child.getAttribute('data-sv-who')).trim() }); continue; }
       const block = BLOCK_TAGS.has(tag);
       if (skipped(child)) { if (block || tags.has(tag)) boundary(); continue; }
       if (block) { boundary(); walk(child, child, kind); boundary(); continue; }
@@ -111,6 +116,12 @@ export function applyRules(doc, options = {}) {
   const skip = options.skip ?? {};
   const read = options.read ?? {};
   for (const block of doc.blocks) mark(doc, QUOTES, KIND.SPEECH, block.start, block.end);
+  // A speaker tag still in the text (not yet hidden): never read, but remembered.
+  for (const found of doc.text.matchAll(SPEAKER_TAG)) {
+    for (let index = found.index; index < found.index + found[0].length; index++) doc.kinds[index] = KIND.SKIP;
+    doc.speakers.push({ at: found.index + found[0].length, name: found[1].trim() });
+  }
+  doc.speakers.sort((a, b) => a.at - b.at);
   if (skip.ooc !== false) for (const pattern of OOC) mark(doc, pattern, KIND.SKIP);
   if (skip.links !== false) mark(doc, LINKS, KIND.SKIP);
   for (const pattern of parsePatterns(skip.regex)) mark(doc, pattern, KIND.SKIP);
@@ -196,7 +207,7 @@ export function buildChunks(doc, { max = 180 } = {}) {
       if (runStart < 0) return;
       for (const range of splitRun(doc.text, runStart, end, max)) {
         const spoken = speakable(doc.text.slice(range.start, range.end));
-        if (HAS_WORD.test(spoken)) chunks.push({ start: range.start, end: range.end, kind: runKind, block: blockIndex, text: spoken });
+        if (HAS_WORD.test(spoken)) chunks.push({ start: range.start, end: range.end, kind: runKind, block: blockIndex, text: spoken, who: speakerAt(doc, block.start, range.start) });
       }
       runStart = -1;
     };
@@ -209,6 +220,16 @@ export function buildChunks(doc, { max = 180 } = {}) {
     }
   });
   return chunks;
+}
+
+/** Who was tagged last in this block before `at`: a name, 'm'/'f', or '' for nobody. */
+export function speakerAt(doc, blockStart, at) {
+  let who = '';
+  for (const speaker of doc.speakers ?? []) {
+    if (speaker.at > at) break;
+    if (speaker.at >= blockStart) who = speaker.name;
+  }
+  return who;
 }
 
 /** Whole pipeline for one rendered message element. */

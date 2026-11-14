@@ -23,6 +23,7 @@ export const ELEVEN_MODELS = Object.freeze(['eleven_multilingual_v2', 'eleven_v3
 export const STYLE_SAMPLES = Object.freeze({
   narrator: 'A calm, low, adult male voice. Unhurried, warm storytelling.',
   character: 'A deep, quiet adult male voice. Natural, close, conversational.',
+  female: 'A warm, clear adult female voice. Natural, close, conversational.',
 });
 
 const CACHE_SIZE = 80;
@@ -78,7 +79,7 @@ function failure(status, body) {
  * deps: fetch(url, init) -> Response; sources() -> { openrouter: { key }, openai: { url, key }, openai2: { url, key }, google: { key }, eleven: { key } }
  * A voice here is { source, model, id, style }.
  */
-export function createRemote({ fetch, sources }) {
+export function createRemote({ fetch, sources, onSynth }) {
   const cache = new Map();
   const lists = new Map();
   const pcmOnly = new Set();
@@ -175,6 +176,8 @@ export function createRemote({ fetch, sources }) {
     const kept = cache.get(id);
     if (kept) { cache.delete(id); cache.set(id, kept); return kept; }
     const made = (async () => synth(voice, text))();
+    // A sound that really came from the internet: counted (a replay from memory is free).
+    made.then(() => onSynth?.(voice, text)).catch(() => {});
     cache.set(id, made);
     made.catch(() => { if (cache.get(id) === made) cache.delete(id); });
     while (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);

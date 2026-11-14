@@ -20,6 +20,9 @@ Out of the box it uses the voices built into your device, which are free and nee
 - **Keeps going.** It can read a new reply as soon as it is finished and continue to the next message.
 - **Skips the clutter.** OOC notes, trackers at the end of a reply, code, links, tags you list, page blocks and your own patterns are not read.
 - **Look.** Colours, background picture, size, cover; the look can be saved to a file and loaded.
+- **Cast.** Switch on «Different voices for other people»: the model marks who speaks (`[v:Name]`, hidden on the page) and each person in the list gets a voice of their own; «another man» and «another woman» catch the rest. New replies only.
+- **Counter.** Today's phrases and how many went to an internet voice; type a price per phrase to see the day's total.
+- **Save the sound.** A button in the player (off by default) saves the whole reply as one file: mp3 when the voice gives mp3, wav otherwise. Device voices cannot be saved.
 
 ## Voice sources
 
@@ -75,6 +78,9 @@ npm test
 - **Не останавливается.** Может читать новый ответ, как только он дописан, и переходить к следующему сообщению.
 - **Пропускает лишнее.** OOC-заметки, трекер в конце ответа, код, ссылки, указанные теги, блоки страницы и свои шаблоны не читаются.
 - **Внешний вид.** Цвета, картинка на фон, размер, обложка; вид сохраняется в файл и загружается из него.
+- **Состав.** Галочка «Разные голоса для других героев»: модель помечает, кто говорит (`[v:Имя]`, на экране не видно), и каждому из списка достаётся свой голос; «другой мужчина» и «другая женщина» ловят остальных. Только на новых ответах.
+- **Счётчик.** Сколько фраз озвучено сегодня и сколько ушло в интернет-голос; впиши цену за фразу, и будет видно, сколько набежало за день.
+- **Сохранить звук.** Кнопка в плеере (по умолчанию выключена) сохраняет весь ответ одним файлом: mp3, если голос отдаёт mp3, иначе wav. Голоса устройства не сохраняются.
 
 ## Откуда голоса
 

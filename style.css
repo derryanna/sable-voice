@@ -243,3 +243,13 @@ html[data-sv-mesbtn="0"] .sv-mes-btn { display: none !important; }
 .sv-settings .sv-suggest { align-items: flex-start; }
 .sv-settings .sv-suggest .menu_button { margin: 0; white-space: nowrap; }
 .sv-settings .sv-suggest small { opacity: 0.7; }
+
+/* Cast: the speaker marks made from [v:Name] are never shown; the list rows. */
+.mes_text .sv-who { display: none !important; }
+.sv-settings .sv-stats { opacity: 0.85; font-variant-numeric: tabular-nums; }
+.sv-settings .sv-cast-list { display: grid; gap: 10px; }
+.sv-settings .sv-cast-list > .sv-note { opacity: 0.65; }
+.sv-settings .sv-cast-row .sv-voice-head { flex-wrap: wrap; }
+.sv-settings .sv-cast-name { flex: 1 1 140px; min-width: 0; margin: 0; }
+.sv-settings .sv-cast-row .sv-buttons { flex-wrap: nowrap; }
+.sv-settings .sv-cast-remove { margin: 0; min-width: 36px; }

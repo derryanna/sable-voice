@@ -39,6 +39,7 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
       transport: `${btn('prev', 'fa-backward-step', tr('act.prev'))}${btn('toggle', 'fa-play', tr('act.play'), 'sv-play')}${btn('next', 'fa-forward-step', tr('act.next'))}`,
       speed: `<button type="button" class="sv-btn sv-chip" data-act="speed" title="${escape(tr('act.speed'))}" aria-label="${escape(tr('act.speed'))}"><span class="sv-speed"></span></button>`,
       who: btn('who', 'fa-book-open', tr('act.who'), 'sv-who'),
+      save: btn('save', 'fa-download', tr('act.save'), 'sv-small sv-save'),
       progress: `<div class="sv-progress"><span class="sv-count sv-now">0</span><input type="range" class="sv-range" data-range="progress" min="0" max="0" step="1" value="0" aria-label="${escape(tr('act.progress'))}"><span class="sv-count sv-total">0</span></div>`,
       volume: `<div class="sv-volume">${icon('fa-volume-low')}<input type="range" class="sv-range" data-range="volume" min="0" max="1" step="0.05" aria-label="${escape(tr('act.volume'))}">${icon('fa-volume-high')}</div>`,
     };
@@ -57,7 +58,7 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
       <div class="sv-bg"></div>
       <header class="sv-top" data-drag="card" title="${escape(tr('act.move'))}">
         <span class="sv-grip" aria-hidden="true"></span>
-        <div class="sv-tools">${btn('mode', 'fa-up-right-and-down-left-from-center', tr('act.expand'), 'sv-small')}${btn('settings', 'fa-gear', tr('act.settings'), 'sv-small')}${btn('card', 'fa-xmark', tr('act.close'), 'sv-small')}</div>
+        <div class="sv-tools">${p.save}${btn('mode', 'fa-up-right-and-down-left-from-center', tr('act.expand'), 'sv-small')}${btn('settings', 'fa-gear', tr('act.settings'), 'sv-small')}${btn('card', 'fa-xmark', tr('act.close'), 'sv-small')}</div>
       </header>
       <div class="sv-cover">${disc()}</div>
       ${meta()}
@@ -79,7 +80,7 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
         ${meta()}
         <div class="sv-controls">${p.transport}</div>
         <div class="sv-extra">${p.speed}${p.who}</div>
-        <div class="sv-tools">${btn('more', 'fa-chevron-down', tr('act.expand'), 'sv-small')}${btn('settings', 'fa-gear', tr('act.settings'), 'sv-small')}${btn('hide', 'fa-xmark', tr('act.close'), 'sv-small')}</div>
+        <div class="sv-tools">${p.save}${btn('more', 'fa-chevron-down', tr('act.expand'), 'sv-small')}${btn('settings', 'fa-gear', tr('act.settings'), 'sv-small')}${btn('hide', 'fa-xmark', tr('act.close'), 'sv-small')}</div>
       </div>
       <div class="sv-bar-more" hidden>
         ${p.progress}
@@ -102,7 +103,7 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
       ${btn('toggle', 'fa-play', tr('act.play'), 'sv-play')}
       ${btn('prev', 'fa-backward-step', tr('act.prev'))}
       ${btn('next', 'fa-forward-step', tr('act.next'))}
-      ${p.speed}${p.who}
+      ${p.speed}${p.who}${p.save}
       ${btn('settings', 'fa-gear', tr('act.settings'), 'sv-small')}
       ${line('sv-line--v')}
     </section>`);
@@ -181,6 +182,7 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
     else if (name === 'card') setCard(!cardOpen);
     else if (name === 'mode') store.set('cardMode', settings.cardMode === 'full' ? 'compact' : 'full');
     else if (name === 'more') { barMore = !barMore; update(engine.state); }
+    else if (name === 'save') actions.save?.();
   }
 
   function listen(target, type, handler, options) {
@@ -304,6 +306,16 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
     glyph.classList.toggle(off, !active);
   }
 
+  // A line of its own under the title (saving progress): shown until it is cleared or its time is up.
+  let noteText = '';
+  let noteTimer = 0;
+  function note(text, ms = 0) {
+    noteText = text;
+    window.clearTimeout(noteTimer);
+    if (text && ms) noteTimer = window.setTimeout(() => { noteText = ''; update(engine.state); }, ms);
+    update(engine.state);
+  }
+
   /** Paints the engine state: titles, buttons, progress. */
   function update(state) {
     if (!roots.length) return;
@@ -315,7 +327,8 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
     const chunk = track?.chunks[state.index];
     const title = track?.name || 'Sable Voice';
     const known = state.error && tr(`err.${state.error}`) !== `err.${state.error}`;
-    const sub = state.error ? (known ? tr(`err.${state.error}`) : state.error)
+    const sub = noteText ? noteText
+      : state.error ? (known ? tr(`err.${state.error}`) : state.error)
       : state.status === 'done' ? tr('done.sub')
       : track && chunk && state.status !== 'idle' ? chunk.text
       : tr('idle.sub');
@@ -363,6 +376,7 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
       button.setAttribute('aria-expanded', String(barMore));
     }
     for (const more of all('.sv-bar-more')) more.hidden = !barMore;
+    for (const button of all('[data-act="save"]')) button.hidden = !settings.download;
     const avatar = settings.visual.cover === 'avatar' ? track?.avatar ?? '' : '';
     for (const image of all('.sv-avatar')) {
       if (avatar && image.getAttribute('src') !== avatar) image.setAttribute('src', avatar);
@@ -370,5 +384,5 @@ export function createPlayer({ document, window, store, engine, t, actions }) {
     }
   }
 
-  return { render, update, destroy, place, openCard: () => setCard(true), isMounted: () => roots.length > 0 };
+  return { render, update, destroy, place, note, openCard: () => setCard(true), isMounted: () => roots.length > 0 };
 }

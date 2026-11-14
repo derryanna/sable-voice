@@ -13,10 +13,14 @@ import { applyVisual } from './src/ui/visual.js';
 import { createPlayer } from './src/ui/player.js';
 import { mountSettings } from './src/ui/settings.js';
 import { SUGGEST_SYSTEM, suggestPrompt, cleanSuggestion } from './src/suggest.js';
+import { castPrompt, pickCastVoice, roleVoice, hideTags, bumpStats, today } from './src/cast.js';
+import { joinSounds, offerFile, fileName } from './src/save.js';
 
 const USER_SCROLL_MS = 4000;
 const RATE_LIMITS = [0.4, 3];
 const AHEAD = 2;
+const CAST_KEY = 'sable_voice_cast';
+const IN_CHAT = 1;
 
 function init() {
   const tavern = globalThis.SillyTavern;
@@ -39,7 +43,7 @@ function init() {
   let language = resolveLanguage(store.get().language, window);
   let tr = createTranslator(language);
   const provider = createDeviceProvider(window);
-  const remote = createRemote({ fetch: (url, init) => window.fetch(url, init), sources: () => store.get().sources });
+  const remote = createRemote({ fetch: (url, init) => window.fetch(url, init), sources: () => store.get().sources, onSynth: () => count('internet') });
   const out = createAudioOut(window);
   const log = (...args) => { if (store.get().debug) console.log('[Sable Voice]', ...args); };
 
@@ -84,13 +88,17 @@ function init() {
     return null;
   }
 
-  /** Voice options for a role: the narrator, or a character (with their own voice when one is chosen). */
-  function voiceFor(narrator, name, text) {
+  /** Today's counter: phrases spoken, phrases that went to the internet. */
+  function count(field) { store.set('stats', bumpStats(store.get().stats, today(), field)); }
+
+  /** Voice options for a role: the narrator, or a character (with their own voice when one is chosen); `who` = a tagged speaker. */
+  function voiceFor(narrator, name, text, who = '') {
     const settings = store.get();
     const base = narrator ? settings.voices.narrator : settings.voices.character;
     const own = !narrator && name ? settings.voices.byName[name] : null;
     // A character's own voice replaces source, model and voice together; the tempo stays the common one.
-    const chosen = own?.source ? own : base;
+    // A line tagged with another speaker takes that person's voice from the cast list.
+    const chosen = (!narrator && pickCastVoice(settings.cast, name, who)) || (own?.source ? own : base);
     return {
       source: chosen.source, model: chosen.model, id: chosen.id, style: chosen.style,
       voice: chosen.id,
@@ -119,10 +127,11 @@ function init() {
     // Two phrases ahead: a phone slows a page down when it is not on the screen.
     const at = track.chunks.indexOf(chunk);
     for (const next of track.chunks.slice(at + 1, at + 1 + AHEAD)) {
-      const ahead = voiceFor(byNarrator(next), name, next.text);
+      const ahead = voiceFor(byNarrator(next), name, next.text, next.who);
       if (ahead.source !== 'device') remote.audio(ahead, next.text).catch(() => {});
     }
-    return say(chunk.text, voiceFor(byNarrator(chunk), name, chunk.text));
+    count('phrases');
+    return say(chunk.text, voiceFor(byNarrator(chunk), name, chunk.text, chunk.who));
   }
 
   // The phrase being read: marked in the text and kept on screen.
@@ -204,7 +213,7 @@ function init() {
     const playing = live && state.status === 'playing';
     // Held through the whole message when any phrase of it is an internet voice: switching per phrase would open gaps.
     const name = track?.isUser ? '' : track?.name;
-    const internet = playing && track.chunks.some(item => voiceFor(byNarrator(item), name, item.text).source !== 'device');
+    const internet = playing && track.chunks.some(item => voiceFor(byNarrator(item), name, item.text, item.who).source !== 'device');
     behind.hold(internet);
     behind.describe(live ? { title: track.name || 'Sable Voice', artist: 'Sable Voice', artwork: track.avatar, playing } : {});
   }
@@ -225,7 +234,11 @@ function init() {
     engine.pause();
     sample?.cancel();
     const narrator = role === 'narrator';
-    const options = voiceFor(narrator, role === 'own' ? charName() : '', '');
+    // A cast voice ('male', 'female', 'cast:N') is tried as it is; one without a source sounds like the common character voice.
+    const cast = roleVoice(store.get(), charName(), role);
+    const options = cast?.source
+      ? { ...voiceFor(false, '', ''), source: cast.source, model: cast.model, id: cast.id, voice: cast.id, style: cast.style }
+      : voiceFor(narrator, role === 'own' ? charName() : '', '');
     const chosen = options.source === 'device' && options.voice ? (await provider.voices()).find(voice => voice.id === options.voice) : null;
     const lang = chosen ? String(chosen.lang).slice(0, 2).toLowerCase() : language;
     const text = createTranslator(lang === 'ru' ? 'ru' : 'en')(narrator ? 'sample.narrator' : 'sample.character');
@@ -259,8 +272,57 @@ function init() {
   player = createPlayer({
     document, window, store, engine,
     t: () => tr,
-    actions: { openSettings: () => settingsUi?.open(), hide: () => store.set('shown', false) },
+    actions: { openSettings: () => settingsUi?.open(), hide: () => store.set('shown', false), save: () => save() },
   });
+
+  // «Save the sound»: every phrase of the message through its internet voice, glued into one file.
+  let saving = false;
+  async function save() {
+    if (saving) return;
+    const id = engine.state.track?.mesId ?? pickLast();
+    const track = id == null ? null : load(id);
+    const tr0 = tr;
+    try {
+      saving = true;
+      if (!track?.chunks.length) throw new Error('empty');
+      const name = track.isUser ? '' : track.name;
+      const voices = track.chunks.map(chunk => voiceFor(byNarrator(chunk), name, chunk.text, chunk.who));
+      if (voices.some(voice => voice.source === 'device')) throw new Error('savedevice');
+      const pieces = [];
+      for (let index = 0; index < track.chunks.length; index++) {
+        player.note(tr0('save.wait', { n: index + 1, total: track.chunks.length }));
+        const chunk = track.chunks[index];
+        const blob = await remote.audio(voices[index], chunk.text);
+        pieces.push({ blob, gap: index && chunk.block !== track.chunks[index - 1].block ? store.get().pauseMs / 1000 : 0 });
+      }
+      player.note(tr0('save.join'));
+      const { blob, ext } = await joinSounds(window, pieces);
+      offerFile(document, blob, fileName(track.name, track.mesId, ext));
+      player.note(tr0('save.done', { ext }), 4000);
+    } catch (error) {
+      const code = String(error?.message ?? error ?? 'error');
+      player.note(tr0(`err.${code}`) !== `err.${code}` ? tr0(`err.${code}`) : code, 6000);
+      log('saving failed', code);
+    } finally { saving = false; }
+  }
+
+  // The cast line in the request: only while the cast is on and a character is open. Names from the list go in, so the model spells them the same.
+  function applyCast() {
+    const context = ctx();
+    if (typeof context.setExtensionPrompt !== 'function') return;
+    const settings = store.get();
+    const name = charName();
+    const text = settings.enabled && settings.cast.enabled && name ? castPrompt(name, (settings.cast.byChar[name] ?? []).map(row => row.name)) : '';
+    context.setExtensionPrompt(CAST_KEY, text, IN_CHAT, 1, false, 0);
+  }
+
+  /** [v:Name] tags in a message (or in every message) become hidden marks. */
+  function hideIn(mesId) {
+    const roots = mesId == null ? chatEl()?.querySelectorAll('.mes .mes_text') ?? [] : [mesEl(mesId)?.querySelector('.mes_text')].filter(Boolean);
+    let hidden = 0;
+    for (const root of roots) hidden += hideTags(root, document);
+    if (hidden) log('speaker tags hidden', hidden);
+  }
 
   // The entry in the wand menu: shows or hides the player.
   let wand = null;
@@ -298,6 +360,9 @@ function init() {
   store.subscribe((settings, path) => {
     const head = path.split('.')[0];
     const everything = path === '';
+    // The counter ticks on every phrase: only its line is repainted.
+    if (head === 'stats') { settingsUi?.stats(); return; }
+    if (everything || head === 'cast' || head === 'enabled') applyCast();
     if (everything || head === 'visual') applyVisual(settings.visual, document.documentElement);
     if (everything || head === 'language') {
       language = resolveLanguage(settings.language, window);
@@ -372,6 +437,7 @@ function init() {
   let autoTimer = 0;
 
   on('CHARACTER_MESSAGE_RENDERED', (mesId, type) => {
+    hideIn(mesId);
     injectButtons();
     const settings = store.get();
     if (!settings.enabled || !settings.shown || !settings.autoplay || type === 'first_message') return;
@@ -387,19 +453,21 @@ function init() {
     autoTimer = window.setTimeout(attempt, 250);
   });
   on('USER_MESSAGE_RENDERED', injectButtons);
-  on('MORE_MESSAGES_LOADED', injectButtons);
+  on('MORE_MESSAGES_LOADED', () => { hideIn(); injectButtons(); });
   on('CHAT_CHANGED', () => {
     window.clearTimeout(autoTimer);
     engine.stop();
+    hideIn();
     injectButtons();
+    applyCast();
     settingsUi?.sync();
   });
   on('MESSAGE_SWIPED', mesId => { if (engine.state.track?.mesId === Number(mesId)) engine.stop(); });
   on('MESSAGE_DELETED', () => { if (engine.state.track) engine.stop(); });
-  const redrawn = mesId => { if (engine.state.track?.mesId === Number(mesId)) window.setTimeout(() => engine.refresh(), 60); };
+  const redrawn = mesId => { hideIn(mesId); if (engine.state.track?.mesId === Number(mesId)) window.setTimeout(() => engine.refresh(), 60); };
   on('MESSAGE_EDITED', redrawn);
   on('MESSAGE_UPDATED', redrawn);
-  on('APP_READY', () => { mountWand(); injectButtons(); player.place(); });
+  on('APP_READY', () => { mountWand(); hideIn(); injectButtons(); applyCast(); player.place(); });
 
   window.speechSynthesis?.addEventListener?.('voiceschanged', () => settingsUi?.reloadVoices());
   // A page that goes away must not keep talking.
@@ -407,7 +475,9 @@ function init() {
 
   applyVisual(store.get().visual, document.documentElement);
   applyFlags();
+  hideIn();
   injectButtons();
+  applyCast();
   mountWand();
   player.render();
   log('ready', { language, voices: provider.available() });

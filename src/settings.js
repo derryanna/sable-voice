@@ -1,7 +1,7 @@
 // Settings: defaults, ranges and one normaliser. Pure, no browser globals.
 
 export const KEY = 'sable_voice';
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 
 export const VIEWS = Object.freeze(['float', 'bar-top', 'bar-bottom', 'side-left', 'side-right']);
 export const LANGUAGES = Object.freeze(['auto', 'ru', 'en']);
@@ -9,6 +9,9 @@ export const CARD_MODES = Object.freeze(['compact', 'full']);
 // What text in *asterisks* is: the character's thoughts, or actions the narrator reads.
 export const ASTERISK = Object.freeze(['thought', 'narration']);
 export const THOUGHT_VOICES = Object.freeze(['character', 'narrator']);
+// Voices for people the model tags but the cast list does not name: a man, a woman.
+export const CAST_FALLBACKS = Object.freeze(['male', 'female']);
+export const CAST_ROWS = 30;
 // Where a voice comes from: the device itself, or a service on the internet (own key needed).
 export const SOURCES = Object.freeze(['device', 'openrouter', 'openai', 'openai2', 'google', 'eleven']);
 // Sources that are just an address and a key: any server that answers like OpenAI's /audio/speech.
@@ -32,6 +35,8 @@ export const BG_IMAGE_MAX_LENGTH = 900 * 1024;
 export const RANGES = Object.freeze({ volume: [0, 1, 0.05], speed: [0.5, 2, 0.05], pauseMs: [0, 1500, 50], chunkChars: [80, 400, 10] });
 export const VOICE_RANGES = Object.freeze({ rate: [0.5, 2, 0.05], pitch: [0, 2, 0.05] });
 export const VOICE_DEFAULTS = Object.freeze({ source: 'device', model: '', id: '', style: '', rate: 1, pitch: 1 });
+// An optional voice: no source = «same as the character voice».
+export const CAST_VOICE = Object.freeze({ ...VOICE_DEFAULTS, source: '' });
 
 export const DEFAULTS = Object.freeze({
   // `shown` is the ✕ on the player: hidden, but the ▶ on messages and the wand-menu entry bring it back.
@@ -44,6 +49,12 @@ export const DEFAULTS = Object.freeze({
   sources: SOURCE_DEFAULTS,
   voices: Object.freeze({ narrator: VOICE_DEFAULTS, character: VOICE_DEFAULTS, thoughts: 'character', byName: Object.freeze({}) }),
   volume: 1, speed: 1, pauseMs: 250, chunkChars: 180,
+  // Cast: the model tags who speaks ([v:Name]); each tagged line gets the voice from this list. Off until switched on.
+  cast: Object.freeze({ enabled: false, male: CAST_VOICE, female: CAST_VOICE, byChar: Object.freeze({}) }),
+  // Today's count: every phrase spoken, and how many went to an internet voice (those are paid). Price per internet phrase is hers to type.
+  stats: Object.freeze({ day: '', phrases: 0, internet: 0 }),
+  price: '',
+  download: false,
   visual: VISUAL_DEFAULTS,
   // Places as fractions of the window, so they survive a rotated phone: fab/card = centre point, side = height.
   pos: Object.freeze({ fab: null, card: null, side: 0.5 }),
@@ -51,6 +62,7 @@ export const DEFAULTS = Object.freeze({
 });
 
 const isObject = value => !!value && typeof value === 'object' && !Array.isArray(value);
+const count = value => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : 0);
 const HEX = /^#[0-9a-f]{6}$/i;
 const DATA_IMAGE = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 const LINK_IMAGE = /^https?:\/\/[^\s"'()\\<>]+$/i;
@@ -121,6 +133,15 @@ export function normalize(raw) {
   const skip = isObject(source.skip) ? source.skip : {};
   const voices = isObject(source.voices) ? source.voices : {};
   const pos = isObject(source.pos) ? source.pos : {};
+  const cast = isObject(source.cast) ? source.cast : {};
+  const stats = isObject(source.stats) ? source.stats : {};
+  const byChar = {};
+  if (isObject(cast.byChar)) {
+    for (const [name, rows] of Object.entries(cast.byChar).slice(0, 200)) {
+      if (!name || !Array.isArray(rows)) continue;
+      byChar[name.slice(0, 200)] = rows.slice(0, CAST_ROWS).filter(isObject).map(row => ({ name: text(row.name, '', 40).trim(), ...normalizeVoice(row, VOICE_DEFAULTS, true) }));
+    }
+  }
   const byName = {};
   if (isObject(voices.byName)) {
     for (const [name, voice] of Object.entries(voices.byName).slice(0, 200)) {
@@ -151,6 +172,10 @@ export function normalize(raw) {
     speed: clamp(source.speed, RANGES.speed, DEFAULTS.speed),
     pauseMs: clamp(source.pauseMs, RANGES.pauseMs, DEFAULTS.pauseMs),
     chunkChars: clamp(source.chunkChars, RANGES.chunkChars, DEFAULTS.chunkChars),
+    cast: { enabled: bool(cast.enabled, false), male: normalizeVoice(cast.male, VOICE_DEFAULTS, true), female: normalizeVoice(cast.female, VOICE_DEFAULTS, true), byChar },
+    stats: { day: text(stats.day, '', 10), phrases: count(stats.phrases), internet: count(stats.internet) },
+    price: text(source.price, '', 20).trim(),
+    download: bool(source.download, false),
     visual: normalizeVisual(source.visual),
     pos: { fab: point(pos.fab), card: point(pos.card), side: clamp(pos.side, [0.08, 0.92, 0], DEFAULTS.pos.side) },
     debug: bool(source.debug, false),

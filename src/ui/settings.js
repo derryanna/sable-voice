@@ -2,7 +2,8 @@
 // them into the store, sync() paints the store back into the rows.
 
 import { VIEWS, LANGUAGES, CARD_MODES, ASTERISK, THOUGHT_VOICES, RANGES, VOICE_RANGES, VISUAL_RANGES, VISUAL_CHOICES, VISUAL_DEFAULTS,
-  DEFAULTS, VERSION, SOURCES, OWN_SOURCES, getPath, normalizeVisual } from '../settings.js';
+  DEFAULTS, VERSION, SOURCES, OWN_SOURCES, CAST_FALLBACKS, CAST_ROWS, getPath, normalizeVisual } from '../settings.js';
+import { roleVoice, costLine, today } from '../cast.js';
 import { DEFAULT_MODELS, STYLE_SAMPLES } from '../providers/remote.js';
 import { PRESETS } from './visual.js';
 
@@ -20,6 +21,22 @@ const FORMATS = {
   chars: (value, tr) => `${value} ${tr('unit.chars')}`,
 };
 
+const testButtonHtml = (tr, role) => `<button type="button" class="menu_button sv-test" data-test="${role}"><i class="fa-solid fa-volume-high" aria-hidden="true"></i> ${esc(tr('voice.test'))}</button>`;
+// One voice = where it comes from, which model, which voice, and (for internet voices) how it should sound.
+const pairHtml = (tr, field, key) => `<div class="sv-row sv-field" data-box="${field}"><span class="sv-label">${esc(tr(key))}</span>`
+  + `<select class="text_pole" data-f="${field}" data-kind="list" aria-label="${esc(tr(key))}"></select>`
+  + `<input type="text" class="text_pole" data-f="${field}" data-kind="text" aria-label="${esc(tr(key))}" spellcheck="false"></div>`;
+const voiceFieldsHtml = (tr, own) => `<div class="sv-row sv-field"><span class="sv-label">${esc(tr('voice.source'))}</span><select class="text_pole" data-f="source" aria-label="${esc(tr('voice.source'))}">${
+    own ? `<option value="">${esc(tr('voice.same'))}</option>` : ''}${SOURCES.map(source => `<option value="${source}">${esc(tr(`source.${source}`))}</option>`).join('')}</select></div>
+      ${pairHtml(tr, 'model', 'voice.model')}${pairHtml(tr, 'id', 'voice.voice')}
+      <div class="sv-row sv-field" data-box="style"><span class="sv-label">${esc(tr('voice.style'))}<small>${esc(tr('voice.style.hint'))}</small></span><textarea class="text_pole" data-f="style" rows="2" aria-label="${esc(tr('voice.style'))}"></textarea></div>
+      <small class="sv-status" data-hint></small>`;
+/** A row of the cast list: name as the model writes it, the voice, a cross. */
+const castRowHtml = (tr, index) => `<div class="sv-voice sv-cast-row" data-role="cast:${index}">
+      <div class="sv-voice-head"><input type="text" class="text_pole sv-cast-name" data-cast-name="${index}" placeholder="${esc(tr('cast.name'))}" aria-label="${esc(tr('cast.name'))}" spellcheck="false" maxlength="40">
+        <div class="sv-buttons">${testButtonHtml(tr, `cast:${index}`)}<button type="button" class="menu_button sv-cast-remove" data-cast-remove="${index}" title="${esc(tr('cast.remove'))}" aria-label="${esc(tr('cast.remove'))}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div></div>
+      ${voiceFieldsHtml(tr, true)}</div>`;
+
 function build(tr) {
   const hintOf = key => (key ? `<small>${esc(tr(key))}</small>` : '');
   const toggle = (path, key, hint) => `<label class="sv-row sv-check"><input type="checkbox" data-path="${path}"><span class="sv-label">${esc(tr(key))}${hintOf(hint)}</span></label>`;
@@ -33,16 +50,10 @@ function build(tr) {
   const color = (key, auto) => `<div class="sv-row sv-color"><span class="sv-label">${esc(tr(`look.${key}`))}</span><input type="color" data-color="${key}" aria-label="${esc(tr(`look.${key}`))}">${
     auto ? `<button type="button" class="menu_button sv-auto" data-auto="${key}">${esc(tr('look.auto'))}</button>` : ''}</div>`;
   const group = (id, body, extra = '') => `<details class="sv-group ${extra}" data-group="${id}"><summary>${esc(tr(`g.${id}`))}</summary><div class="sv-grid">${body}</div></details>`;
-  const testButton = role => `<button type="button" class="menu_button sv-test" data-test="${role}"><i class="fa-solid fa-volume-high" aria-hidden="true"></i> ${esc(tr('voice.test'))}</button>`;
-  // One voice = where it comes from, which model, which voice, and (for internet voices) how it should sound.
-  const pair = (field, key) => `<div class="sv-row sv-field" data-box="${field}"><span class="sv-label">${esc(tr(key))}</span>`
-    + `<select class="text_pole" data-f="${field}" data-kind="list" aria-label="${esc(tr(key))}"></select>`
-    + `<input type="text" class="text_pole" data-f="${field}" data-kind="text" aria-label="${esc(tr(key))}" spellcheck="false"></div>`;
-  const voiceFields = own => `<div class="sv-row sv-field"><span class="sv-label">${esc(tr('voice.source'))}</span><select class="text_pole" data-f="source" aria-label="${esc(tr('voice.source'))}">${
-      own ? `<option value="">${esc(tr('voice.same'))}</option>` : ''}${SOURCES.map(source => `<option value="${source}">${esc(tr(`source.${source}`))}</option>`).join('')}</select></div>
-      ${pair('model', 'voice.model')}${pair('id', 'voice.voice')}
-      <div class="sv-row sv-field" data-box="style"><span class="sv-label">${esc(tr('voice.style'))}<small>${esc(tr('voice.style.hint'))}</small></span><textarea class="text_pole" data-f="style" rows="2" aria-label="${esc(tr('voice.style'))}"></textarea></div>
-      <small class="sv-status" data-hint></small>`;
+  const testButton = role => testButtonHtml(tr, role);
+  const voiceFields = own => voiceFieldsHtml(tr, own);
+  // A voice for people the cast list does not name: no tempo of its own, the common one is used.
+  const castCard = role => `<div class="sv-voice sv-wide" data-role="${role}"><div class="sv-voice-head"><b>${esc(tr(`voice.${role}`))}</b>${testButton(role)}</div>${voiceFields(true)}</div>`;
   const voice = role => `<div class="sv-voice sv-wide" data-role="${role}">
       <div class="sv-voice-head"><b>${esc(tr(`voice.${role}`))}</b>${testButton(role)}</div>
       ${voiceFields(false)}
@@ -65,7 +76,8 @@ function build(tr) {
         ${toggle('mesButton', 'mesButton')}
         ${toggle('tapJump', 'tapJump', 'tapJump.hint')}
         ${toggle('highlight', 'highlight')}
-        ${toggle('follow', 'follow')}`)}
+        ${toggle('follow', 'follow')}
+        ${toggle('download', 'download', 'download.hint')}`)}
       ${group('read', `
         ${toggle('read.narration', 'read.narration')}
         ${toggle('read.speech', 'read.speech')}
@@ -79,6 +91,8 @@ function build(tr) {
           <div class="sv-row sv-wide sv-note"><small>${esc(tr('keys.hint'))}</small></div>
         </div></details>
         <small class="sv-status sv-wide" data-status="voices" role="status"></small>
+        <div class="sv-row sv-wide sv-stats"><span data-stats></span></div>
+        ${text('price', 'price', 'price.hint')}
         <div class="sv-row sv-wide sv-warn" data-novoice hidden>${esc(tr('voice.none'))}</div>
         ${voice('narrator')}
         ${voice('character')}
@@ -92,6 +106,12 @@ function build(tr) {
         ${range('volume', 'volume', RANGES.volume, 'percent')}
         ${range('pauseMs', 'pauseMs', RANGES.pauseMs, 'ms')}
         ${range('chunkChars', 'chunkChars', RANGES.chunkChars, 'chars', 'chunkChars.hint')}`)}
+      ${group('cast', `
+        ${toggle('cast.enabled', 'cast.enabled', 'cast.enabled.hint')}
+        <div class="sv-row sv-wide sv-note"><small>${esc(tr('cast.note'))}</small></div>
+        <div class="sv-wide sv-cast-list" data-cast-list></div>
+        <div class="sv-row sv-wide sv-buttons"><button type="button" class="menu_button" data-cast-add><i class="fa-solid fa-plus" aria-hidden="true"></i> ${esc(tr('cast.add'))}</button></div>
+        ${castCard('male')}${castCard('female')}`)}
       ${group('skip', `
         ${toggle('skip.ooc', 'skip.ooc')}
         ${toggle('skip.footer', 'skip.footer', 'skip.footer.hint')}
@@ -201,20 +221,91 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
 
   function voiceOf(role) {
     const settings = store.get();
-    if (role !== 'own') return settings.voices[role];
+    if (role === 'narrator' || role === 'character') return settings.voices[role];
     const name = getCharName();
-    return (name && settings.voices.byName[name]) || EMPTY;
+    if (role === 'own') return (name && settings.voices.byName[name]) || EMPTY;
+    return roleVoice(settings, name, role) ?? EMPTY;
+  }
+
+  const castRows = name => [...(store.get().cast.byChar[name] ?? [])];
+  const setCastRows = (name, rows) => store.set('cast.byChar', { ...store.get().cast.byChar, [name]: rows });
+
+  function addCast() {
+    const name = getCharName();
+    if (!name) return;
+    const rows = castRows(name);
+    if (rows.length >= CAST_ROWS) return;
+    rows.push({ ...EMPTY, name: '' });
+    setCastRows(name, rows);
+    later(() => root.querySelector(`[data-cast-name="${rows.length - 1}"]`)?.focus(), 0);
+  }
+
+  function removeCast(index) {
+    const name = getCharName();
+    if (!name) return;
+    const rows = castRows(name);
+    rows.splice(index, 1);
+    setCastRows(name, rows);
+  }
+
+  function setCastName(index, value) {
+    const name = getCharName();
+    const rows = name ? castRows(name) : [];
+    if (!rows[index]) return;
+    rows[index] = { ...rows[index], name: value.trim().slice(0, 40) };
+    setCastRows(name, rows);
+  }
+
+  let castSignature = '';
+  /** The cast rows of the open character; returns their roles ('cast:0', …). Rebuilt only when the character or the count changes. */
+  function renderCast() {
+    const list = root.querySelector('[data-cast-list]');
+    if (!list) return [];
+    const tr = t();
+    const name = getCharName();
+    const rows = name ? store.get().cast.byChar[name] ?? [] : [];
+    const signature = `${name}|${rows.length}`;
+    if (signature !== castSignature) {
+      castSignature = signature;
+      list.innerHTML = !name ? `<small class="sv-note">${esc(tr('cast.none'))}</small>`
+        : !rows.length ? `<small class="sv-note">${esc(tr('cast.empty', { name }))}</small>`
+        : rows.map((row, index) => castRowHtml(tr, index)).join('');
+    }
+    const active = document.activeElement;
+    rows.forEach((row, index) => { const input = list.querySelector(`[data-cast-name="${index}"]`); if (input && input !== active) input.value = row.name; });
+    const add = root.querySelector('[data-cast-add]');
+    if (add) add.disabled = !name || rows.length >= CAST_ROWS;
+    return rows.map((row, index) => `cast:${index}`);
+  }
+
+  /** Today's line: phrases spoken, phrases over the internet, the cost when a price is typed. */
+  function stats() {
+    const element = root.querySelector('[data-stats]');
+    if (!element) return;
+    const settings = store.get();
+    const now = settings.stats.day === today() ? settings.stats : { phrases: 0, internet: 0 };
+    const cost = costLine(now, settings.price);
+    element.textContent = `${t()('stats.line', { phrases: now.phrases, internet: now.internet })}${cost ? ` ${cost}` : ''}`;
   }
 
   function setVoice(role, field, value) {
     const current = voiceOf(role);
     const patch = { [field]: value };
     // Another source has other models and voices; a model without a voice list needs the voice described.
-    if (field === 'source') Object.assign(patch, { model: '', id: '' }, value && value !== 'device' && !current.style ? { style: STYLE_SAMPLES[role === 'narrator' ? 'narrator' : 'character'] } : {});
+    if (field === 'source') Object.assign(patch, { model: '', id: '' }, value && value !== 'device' && !current.style ? { style: STYLE_SAMPLES[role === 'narrator' ? 'narrator' : role === 'female' ? 'female' : 'character'] } : {});
     if (field === 'model') patch.id = '';
-    if (role !== 'own') { store.set(`voices.${role}`, { ...current, ...patch }); return; }
+    if (role === 'narrator' || role === 'character') { store.set(`voices.${role}`, { ...current, ...patch }); return; }
+    if (CAST_FALLBACKS.includes(role)) { store.set(`cast.${role}`, { ...current, ...patch }); return; }
     const name = getCharName();
     if (!name) return;
+    const row = /^cast:(\d+)$/.exec(role);
+    if (row) {
+      const rows = castRows(name);
+      if (!rows[row[1]]) return;
+      rows[row[1]] = { ...rows[row[1]], ...patch };
+      setCastRows(name, rows);
+      return;
+    }
     const byName = { ...store.get().voices.byName };
     if (field === 'source' && !value) delete byName[name]; else byName[name] = { ...current, ...patch };
     store.set('voices.byName', byName);
@@ -289,7 +380,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     box('pitch', source === 'device');
     const style = field('style');
     if (style !== active) style.value = voice.style ?? '';
-    style.placeholder = STYLE_SAMPLES[role === 'narrator' ? 'narrator' : 'character'];
+    style.placeholder = STYLE_SAMPLES[role === 'narrator' ? 'narrator' : role === 'female' ? 'female' : 'character'];
     hint('');
 
     if (!source) { show('model', ''); show('id', ''); return; }
@@ -379,12 +470,17 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     const name = getCharName();
     const title = root.querySelector('[data-own-title]');
     if (title) title.textContent = name ? tr('voice.own', { name }) : tr('voice.own.none');
-    const ownTest = root.querySelector('[data-test="own"]');
-    if (ownTest) ownTest.disabled = !name || !settings.voices.byName[name]?.source;
     const suggestButton = root.querySelector('[data-suggest]');
     if (suggestButton && !suggesting) suggestButton.disabled = !name;
     fillVoiceSelects();
-    for (const role of ['narrator', 'character', 'own']) paint(role);
+    stats();
+    const roles = ['narrator', 'character', 'own', ...CAST_FALLBACKS, ...renderCast()];
+    for (const role of roles) {
+      // The optional voices can be tried only once they have a source.
+      const test = root.querySelector(`[data-test="${role}"]`);
+      if (test && role !== 'narrator' && role !== 'character') test.disabled = !voiceOf(role).source;
+      paint(role);
+    }
   }
 
   function render() {
@@ -415,7 +511,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
   const DANGER = {
     look: () => store.set('visual', { ...VISUAL_DEFAULTS }),
     pos: () => { store.set('pos', { ...DEFAULTS.pos }); store.set('shown', true); },
-    voices: () => store.set('voices.byName', {}),
+    voices: () => { store.set('voices.byName', {}); store.set('cast.byChar', {}); },
     all: () => store.reset(),
   };
 
@@ -484,6 +580,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
       setValue(element);
     }
     else if (element.matches('[data-f]')) setVoice(element.closest('.sv-voice')?.dataset.role, element.dataset.f, element.value.trim());
+    else if (element.matches('[data-cast-name]')) setCastName(Number(element.dataset.castName), element.value);
     else if (element.matches('[data-bg-link]')) {
       const value = element.value.trim();
       if (!value) { if (!store.get().visual.bgImage?.startsWith('data:')) store.set('visual.bgImage', null); return; }
@@ -498,6 +595,8 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     if (!button || !root.contains(button)) return;
     if (button.dataset.test) onTest(button.dataset.test);
     else if ('suggest' in button.dataset) suggest(button);
+    else if ('castAdd' in button.dataset) addCast();
+    else if (button.dataset.castRemove != null) removeCast(Number(button.dataset.castRemove));
     else if (button.dataset.auto) store.set(`visual.${button.dataset.auto}`, null);
     else if (button.dataset.preset) {
       const preset = PRESETS.find(item => item.id === button.dataset.preset);
@@ -528,5 +627,5 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
 
   render();
   loadVoices();
-  return { root, render, sync, open, destroy, note, reloadVoices: loadVoices };
+  return { root, render, sync, open, destroy, note, stats, reloadVoices: loadVoices };
 }

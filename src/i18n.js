@@ -78,6 +78,16 @@ const RU = {
   'danger.note': 'Здесь всё сбрасывается сразу. Вернуть нельзя.',
   'danger.look': 'Сбросить внешний вид', 'danger.pos': 'Вернуть плеер на место', 'danger.voices': 'Забыть голоса персонажей',
   'danger.all': 'Сбросить все настройки', 'danger.sure': 'Точно? Нажми ещё раз', 'danger.done': 'Готово',
+  'act.save': 'Сохранить звук',
+  'download': 'Кнопка «Сохранить звук» в плеере', 'download.hint': 'Весь ответ одним файлом: mp3, если голос отдаёт mp3, иначе wav. Голоса устройства не сохраняются.',
+  'save.wait': 'Собираю звук… {n} из {total}', 'save.join': 'Склеиваю…', 'save.done': 'Файл {ext} готов',
+  'err.savedevice': 'Голос устройства не сохранить — выбери интернет-голос',
+  'g.cast': 'Состав',
+  'cast.enabled': 'Разные голоса для других героев', 'cast.enabled.hint': 'Модель будет помечать, кто говорит; метки на экране не видны. Работает на новых ответах.',
+  'cast.note': 'Список ведётся для открытой карточки. Кого в списке нет, читает «другой мужчина» или «другая женщина», а без них — голос персонажа.',
+  'cast.add': 'Добавить героя', 'cast.name': 'Имя, как в тексте', 'cast.remove': 'Убрать', 'cast.none': 'Открой чат с персонажем', 'cast.empty': 'У {name} пока никого нет в списке',
+  'voice.male': 'Другой мужчина', 'voice.female': 'Другая женщина',
+  'stats.line': 'Сегодня прочитано фраз: {phrases}, запросов к интернет-голосам: {internet}', 'price': 'Цена одной интернет-фразы', 'price.hint': 'Впиши число — покажу, сколько набежало за день.',
   'debug': 'Писать журнал в консоль',
 };
 
@@ -159,7 +169,17 @@ const EN = {
   'danger.note': 'Everything here resets at once. It cannot be undone.',
   'danger.look': 'Reset the look', 'danger.pos': 'Put the player back in place', 'danger.voices': 'Forget character voices',
   'danger.all': 'Reset all settings', 'danger.sure': 'Sure? Press again', 'danger.done': 'Done',
-  'debug': 'Write a log to the console',
+  'act.save': 'Save the sound',
+  'download': '«Save the sound» button in the player', 'download.hint': 'The whole reply as one file: mp3 when the voice gives mp3, wav otherwise. Device voices cannot be saved.',
+  'save.wait': 'Making the sound… {n} of {total}', 'save.join': 'Joining…', 'save.done': 'The {ext} file is ready',
+  'err.savedevice': 'A device voice cannot be saved — pick an internet voice',
+  'g.cast': 'Cast',
+  'cast.enabled': 'Different voices for other people', 'cast.enabled.hint': 'The model marks who speaks; the marks are hidden on the page. New replies only.',
+  'cast.note': 'The list belongs to the open character. Anyone not listed is read by «another man» or «another woman», or by the character voice when those are not set.',
+  'cast.add': 'Add a person', 'cast.name': 'Name as in the text', 'cast.remove': 'Remove', 'cast.none': 'Open a chat with a character', 'cast.empty': '{name} has nobody in the list yet',
+  'voice.male': 'Another man', 'voice.female': 'Another woman',
+  'stats.line': 'Today: {phrases} phrases read, {internet} requests to internet voices', 'price': 'Price of one internet phrase', 'price.hint': 'Type a number and the day total shows up.',
+  'debug': 'Log to the console',
 };
 
 export const DICTIONARIES = Object.freeze({ ru: RU, en: EN });
