@@ -2,7 +2,7 @@
 // them into the store, sync() paints the store back into the rows.
 
 import { VIEWS, LANGUAGES, CARD_MODES, ASTERISK, THOUGHT_VOICES, RANGES, VOICE_RANGES, VISUAL_RANGES, VISUAL_CHOICES, VISUAL_DEFAULTS,
-  DEFAULTS, VERSION, SOURCES, getPath, normalizeVisual } from '../settings.js';
+  DEFAULTS, VERSION, SOURCES, OWN_SOURCES, getPath, normalizeVisual } from '../settings.js';
 import { DEFAULT_MODELS, STYLE_SAMPLES } from '../providers/remote.js';
 import { PRESETS } from './visual.js';
 
@@ -48,7 +48,7 @@ function build(tr) {
       ${voiceFields(false)}
       <div class="sv-grid">${range(`voices.${role}.rate`, 'voice.rate', VOICE_RANGES.rate, 'times')}<div data-box="pitch">${range(`voices.${role}.pitch`, 'voice.pitch', VOICE_RANGES.pitch, 'times')}</div></div>
     </div>`;
-  const secret = (source, field, key) => `<label class="sv-row sv-field"><span class="sv-label">${esc(tr(key))}</span><input type="${field === 'key' ? 'password' : 'text'}" class="text_pole" data-path="sources.${source}.${field}" data-source="${source}" autocomplete="off" spellcheck="false"></label>`;
+  const secret = (source, field, key) => `<label class="sv-row sv-field"><span class="sv-label">${esc(tr(key))}</span><input type="${field === 'key' ? 'password' : 'text'}" class="text_pole" data-path="sources.${source}.${field}" data-sv-source="${source}" autocomplete="off" spellcheck="false"></label>`;
 
   return `<div class="inline-drawer">
     <div class="inline-drawer-toggle inline-drawer-header"><b>${esc(tr('set.title'))}</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
@@ -75,7 +75,7 @@ function build(tr) {
       ${group('voices', `
         <details class="sv-keys sv-wide" data-group="keys"><summary>${esc(tr('keys.title'))}</summary><div class="sv-grid">
           ${secret('openrouter', 'key', 'keys.openrouter')}${secret('google', 'key', 'keys.google')}${secret('eleven', 'key', 'keys.eleven')}
-          ${secret('openai', 'url', 'keys.openai.url')}${secret('openai', 'key', 'keys.openai')}
+          ${OWN_SOURCES.map(source => `${secret(source, 'url', `keys.${source}.url`)}${secret(source, 'key', `keys.${source}`)}`).join('')}
           <div class="sv-row sv-wide sv-note"><small>${esc(tr('keys.hint'))}</small></div>
         </div></details>
         <small class="sv-status sv-wide" data-status="voices" role="status"></small>
@@ -85,6 +85,7 @@ function build(tr) {
         <div class="sv-voice sv-wide" data-role="own">
           <div class="sv-voice-head"><b data-own-title></b>${testButton('own')}</div>
           ${voiceFields(true)}
+          <div class="sv-row sv-suggest"><button type="button" class="menu_button" data-suggest><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> ${esc(tr('voice.suggest'))}</button><small>${esc(tr('voice.suggest.hint'))}</small></div>
         </div>
         ${select('voices.thoughts', 'voice.thoughts', THOUGHT_VOICES, 'voice.thoughts')}
         ${range('speed', 'speed', RANGES.speed, 'times')}
@@ -169,9 +170,9 @@ async function shrink(document, file) {
 
 /**
  * deps: document, window, store, t() -> translator, uiLanguage() -> 'ru' | 'en', provider (device voices), remote (internet voices),
- *       getCharName() -> string, onTest(role)
+ *       getCharName() -> string, onTest(role), onSuggest() -> Promise<string>
  */
-export function mountSettings({ document, window, store, t, uiLanguage, provider, remote, getCharName, onTest }) {
+export function mountSettings({ document, window, store, t, uiLanguage, provider, remote, getCharName, onTest, onSuggest }) {
   const host = document.getElementById('extensions_settings2') ?? document.getElementById('extensions_settings');
   if (!host) return null;
   const root = document.createElement('div');
@@ -230,6 +231,33 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     return `<option value="">${esc(tr('voice.auto'))}</option>${near}${rest ? `<optgroup label="${esc(tr('voice.other'))}">${rest}</optgroup>` : ''}`;
   }
 
+  let suggesting = false;
+  /** Asks for a voice description of the open character and puts it into their own voice. */
+  async function suggest(button) {
+    const name = getCharName();
+    if (!name || suggesting || !onSuggest) return;
+    const tr = t();
+    suggesting = true;
+    button.disabled = true;
+    note('voices', tr('voice.suggest.wait'));
+    try {
+      const style = await onSuggest();
+      if (!style) throw new Error('empty');
+      if (getCharName() !== name) return;
+      const settings = store.get();
+      const own = settings.voices.byName[name];
+      // No own voice yet: start from the common character voice, so only the description differs.
+      const base = own?.source ? own : { ...EMPTY, source: settings.voices.character.source, model: settings.voices.character.model, id: settings.voices.character.id };
+      store.set('voices.byName', { ...settings.voices.byName, [name]: { ...base, style } });
+      note('voices', tr(base.source === 'device' ? 'voice.suggest.device' : 'voice.suggest.done'));
+    } catch {
+      note('voices', tr('voice.suggest.fail'));
+    } finally {
+      suggesting = false;
+      button.disabled = !getCharName();
+    }
+  }
+
   /** Paints one voice card: which of the fields this source has, and what can be chosen in them. */
   async function paint(role) {
     const card = root.querySelector(`.sv-voice[data-role="${role}"]`);
@@ -266,7 +294,17 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
 
     if (!source) { show('model', ''); show('id', ''); return; }
     if (source === 'device') { show('model', ''); show('id', 'list', deviceOptions(), voice.id); return; }
-    if (source === 'openai') { show('model', 'text', '', voice.model); show('id', 'text', '', voice.id); return; }
+    if (OWN_SOURCES.includes(source)) {
+      // The address is asked for its voice models; when it has no list, both fields are typed by hand.
+      show('model', 'text', '', voice.model); show('id', 'text', '', voice.id);
+      let list = null;
+      try { list = await remote.catalog(source); } catch { /* typed by hand */ }
+      if (turn !== turns[role] || !card.isConnected || !list?.models.length) return;
+      show('model', 'list', options(list.models, tr('voice.pick')), voice.model);
+      const voices = list.models.find(item => item.id === voice.model)?.voices;
+      if (voices?.length) show('id', 'list', options(voices, tr('voice.default')), voice.id);
+      return;
+    }
 
     const model = voice.model || DEFAULT_MODELS[source];
     show('model', 'list', options([{ id: model, name: model }]), model);
@@ -343,6 +381,8 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     if (title) title.textContent = name ? tr('voice.own', { name }) : tr('voice.own.none');
     const ownTest = root.querySelector('[data-test="own"]');
     if (ownTest) ownTest.disabled = !name || !settings.voices.byName[name]?.source;
+    const suggestButton = root.querySelector('[data-suggest]');
+    if (suggestButton && !suggesting) suggestButton.disabled = !name;
     fillVoiceSelects();
     for (const role of ['narrator', 'character', 'own']) paint(role);
   }
@@ -440,7 +480,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     const element = event.target;
     if (element.matches('[data-path]') && element.type !== 'range') {
       // A new key or address: the lists of that source are asked again.
-      if (element.dataset.source) remote.forget(element.dataset.source);
+      if (element.dataset.svSource) remote.forget(element.dataset.svSource);
       setValue(element);
     }
     else if (element.matches('[data-f]')) setVoice(element.closest('.sv-voice')?.dataset.role, element.dataset.f, element.value.trim());
@@ -457,6 +497,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
     const button = event.target.closest('button');
     if (!button || !root.contains(button)) return;
     if (button.dataset.test) onTest(button.dataset.test);
+    else if ('suggest' in button.dataset) suggest(button);
     else if (button.dataset.auto) store.set(`visual.${button.dataset.auto}`, null);
     else if (button.dataset.preset) {
       const preset = PRESETS.find(item => item.id === button.dataset.preset);

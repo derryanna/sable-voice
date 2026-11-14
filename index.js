@@ -12,6 +12,7 @@ import { createTranslator, resolveLanguage } from './src/i18n.js';
 import { applyVisual } from './src/ui/visual.js';
 import { createPlayer } from './src/ui/player.js';
 import { mountSettings } from './src/ui/settings.js';
+import { SUGGEST_SYSTEM, suggestPrompt, cleanSuggestion } from './src/suggest.js';
 
 const USER_SCROLL_MS = 4000;
 const RATE_LIMITS = [0.4, 3];
@@ -240,6 +241,12 @@ function init() {
     t: () => tr,
     uiLanguage: () => language,
     getCharName: charName,
+    onSuggest: async () => {
+      const context = ctx();
+      const prompt = suggestPrompt(context.characters?.[context.characterId] ?? {});
+      if (!prompt || !context.generateRaw) return '';
+      return cleanSuggestion(await context.generateRaw({ prompt, systemPrompt: SUGGEST_SYSTEM, responseLength: 300 }));
+    },
     onTest: role => {
       test(role).catch(error => {
         const code = String(error?.message ?? error ?? 'error');

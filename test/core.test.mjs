@@ -297,6 +297,8 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
       if (body.model === 'broke') return answer(402, '{}');
       return answer(200, new Uint8Array([9, 9, 9]), 'audio/mpeg');
     }
+    if (url.endsWith('/v1/models')) return answer(200, JSON.stringify({ data: [{ id: 'chat-big' }, { id: 'gemini-3.8-flash-tts' }, { id: 'gpt-4o-mini-tts' }, { id: 'eleven_v3', supported_endpoint_types: ['Text to speech'] }] }));
+    if (url.endsWith(':generateContent')) return answer(200, JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/wav', data: 'UklGRgAAAABXQVZFZm10IA==' } }] } }] }));
     if (url.includes('/v1/text-to-speech/')) return answer(200, new Uint8Array([7, 7]), 'audio/mpeg');
     return answer(404, 'nope');
   };
@@ -326,6 +328,20 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
 
   await remote.audio({ source: 'openai', model: 'tts-1', id: 'onyx', style: '' }, 'x');
   assert.equal(calls.at(-1).url, 'http://home:8000/v1/audio/speech');
+  config.openai2 = { url: 'https://two.example/v1', key: 'k2' };
+  await remote.audio({ source: 'openai2', model: 'tts-1', id: 'onyx', style: '' }, 'x');
+  assert.equal(calls.at(-1).url, 'https://two.example/v1/audio/speech');
+  assert.equal(calls.at(-1).headers.Authorization, 'Bearer k2', 'the second address uses its own key');
+  const gem = await remote.audio({ source: 'openai2', model: 'gemini-3.8-flash-tts', id: 'Charon', style: 'Low and calm.' }, 'Hello');
+  assert.equal(calls.at(-1).url, 'https://two.example/v1beta/models/gemini-3.8-flash-tts:generateContent', 'a Gemini voice model is asked the Gemini way');
+  assert.equal(calls.at(-1).body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Charon');
+  assert.match(calls.at(-1).body.contents[0].parts[0].text, /^# AUDIO PROFILE\nLow and calm\.\n[^]*# TRANSCRIPT\nHello$/);
+  assert.equal(gem.type, 'audio/wav');
+  const own = await remote.catalog('openai2');
+  assert.deepEqual(own.models.map(item => item.id), ['eleven_v3', 'gemini-3.8-flash-tts', 'gpt-4o-mini-tts'], 'only voice models are listed');
+  assert.equal(own.models[1].voices.length, 30);
+  assert.equal(own.models[2].voices[0].id, 'alloy');
+  assert.equal(own.models[0].voices, null);
   await remote.audio({ source: 'eleven', model: '', id: 'abc', style: '' }, 'x');
   assert.equal(calls.at(-1).headers['xi-api-key'], 'e1');
   assert.deepEqual(calls.at(-1).body, { text: 'x', model_id: 'eleven_multilingual_v2' });
@@ -367,4 +383,16 @@ test('remote: Google answer and the model lists', async () => {
   const eleven = await remote.catalog('eleven');
   assert.deepEqual(eleven.models.map(model => model.id), ['eleven_v3']);
   assert.deepEqual(eleven.models[0].voices, [{ id: 'v1', name: 'Adam · male' }]);
+});
+
+test('voice suggestion: the request is built from the card and the answer is cleaned', async () => {
+  const { suggestPrompt, cleanSuggestion } = await import('../src/suggest.js');
+  assert.equal(suggestPrompt({}), '');
+  const prompt = suggestPrompt({ name: 'Rowan', description: 'A tired detective, 40.', personality: '', mes_example: 'x'.repeat(9000) });
+  assert.match(prompt, /^Name: Rowan\n\nDescription: A tired detective, 40\./);
+  assert.ok(!prompt.includes('Personality'));
+  assert.ok(prompt.length < 6100);
+  assert.equal(cleanSuggestion('<think>hm</think> **Voice:** "A low, dry male voice in his forties; unhurried."'), 'A low, dry male voice in his forties; unhurried.');
+  assert.ok(cleanSuggestion('Deep male voice. '.repeat(60)).length <= 300);
+  assert.equal(cleanSuggestion(null), '');
 });

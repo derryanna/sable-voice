@@ -29,11 +29,13 @@ Each voice (narrator, character, a character's own) picks its source in **Voices
 | --- | --- | --- |
 | This device | nothing | Free. Voices depend on the browser and the system. |
 | OpenRouter | an OpenRouter key | Speech models from its list, free ones are marked. Some take a text description of the voice instead of a voice name. |
-| Own address (OpenAI-shaped) | address and key | Any server that answers like OpenAI's `/audio/speech`. |
+| Own address 1 and 2 (OpenAI-shaped) | address and key | Any server that answers like OpenAI's `/audio/speech`. Its voice models are listed when it has a model list; Gemini voice models there are asked the Gemini way. |
 | Google Gemini | a Google AI Studio key | 30 voices and a style description. |
 | ElevenLabs | an ElevenLabs key | Your own voices are listed once the key is in. |
 
 Keys are typed under **Voices → Keys**. They are stored as plain text in the settings of your SillyTavern and are sent only to their own service, straight from the browser. Internet voices cost whatever the service charges.
+
+The open character can have a voice of its own. **Suggest from the card** asks the tavern's current model to describe the voice from the card in a phrase or two (one short request); the description is used by models that take a voice description.
 
 ## Reading with the screen off
 
@@ -82,11 +84,13 @@ npm test
 | --- | --- | --- |
 | Это устройство | ничего | Бесплатно. Голоса зависят от браузера и системы. |
 | OpenRouter | ключ OpenRouter | Речевые модели из его списка, бесплатные помечены. Некоторым вместо имени голоса нужно описание словами. |
-| Свой адрес (как у OpenAI) | адрес и ключ | Любой сервер, который отвечает как `/audio/speech` у OpenAI. |
+| Свой адрес 1 и 2 (как у OpenAI) | адрес и ключ | Любой сервер, который отвечает как `/audio/speech` у OpenAI. Голосовые модели подтягиваются списком, если сервер его отдаёт; голосовые модели Gemini спрашиваются по-гемини. |
 | Google Gemini | ключ Google AI Studio | 30 голосов и описание манеры. |
 | ElevenLabs | ключ ElevenLabs | Свои голоса появятся в списке, когда вписан ключ. |
 
 Ключи вписываются в **Голоса → Ключи**. Они лежат открытым текстом в настройках твоей таверны и уходят только в свой сервис, прямо из браузера. Интернет-голоса стоят столько, сколько берёт сервис.
+
+У открытого персонажа может быть свой голос. Кнопка **Подобрать по карточке** просит текущую модель таверны описать голос по карточке в паре фраз (один короткий запрос); описание пригодится моделям, которые понимают описание голоса.
 
 ## Чтение с выключенным экраном
 

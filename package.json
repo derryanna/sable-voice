@@ -1,6 +1,6 @@
 {
   "name": "sable-voice",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "SillyTavern extension: a voice player that reads replies aloud with separate narrator and character voices",

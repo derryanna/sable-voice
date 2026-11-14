@@ -240,3 +240,6 @@ html[data-sv-mesbtn="0"] .sv-mes-btn { display: none !important; }
 .sv-settings .sv-keys > .sv-grid { margin-top: 8px; }
 .sv-settings .sv-voice textarea { resize: vertical; min-height: 44px; }
 .sv-settings .sv-voice [data-hint]:empty, .sv-settings .sv-status:empty { display: none; }
+.sv-settings .sv-suggest { align-items: flex-start; }
+.sv-settings .sv-suggest .menu_button { margin: 0; white-space: nowrap; }
+.sv-settings .sv-suggest small { opacity: 0.7; }

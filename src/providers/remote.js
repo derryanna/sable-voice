@@ -1,17 +1,23 @@
 // Voice sources that live on the internet: OpenRouter, any OpenAI-shaped address, Google Gemini, ElevenLabs.
 // Each one turns a phrase into an audio file (a Blob). Pure: `fetch` comes in, so this runs under node tests.
 
+import { OWN_SOURCES } from '../settings.js';
+
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
 export const GOOGLE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export const ELEVEN_URL = 'https://api.elevenlabs.io';
 
-export const DEFAULT_MODELS = Object.freeze({ openrouter: 'fish-audio/s2.1-pro-free:free', openai: '', google: 'gemini-3.8-flash-tts',
+export const DEFAULT_MODELS = Object.freeze({ openrouter: 'fish-audio/s2.1-pro-free:free', openai: '', openai2: '', google: 'gemini-3.8-flash-tts',
   eleven: 'eleven_multilingual_v2' });
 export const GOOGLE_MODELS = Object.freeze(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-pro-preview-tts']);
 export const GOOGLE_VOICES = Object.freeze(['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe', 'Enceladus',
   'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux',
   'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat']);
 export const GOOGLE_DEFAULT_VOICE = 'Kore';
+export const OPENAI_VOICES = Object.freeze(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse']);
+// On an own address a Gemini voice model is asked the Gemini way; every other model the OpenAI way.
+export const isGeminiVoice = model => /gemini.*tts/i.test(String(model ?? ''));
+const isOpenAiVoice = model => /^(tts-1|gpt-4o.*-tts)/i.test(String(model ?? ''));
 export const ELEVEN_MODELS = Object.freeze(['eleven_multilingual_v2', 'eleven_v3', 'eleven_flash_v2_5', 'eleven_turbo_v2_5']);
 // A model with no voice list (Fish) picks a random voice for every phrase unless the voice is described.
 export const STYLE_SAMPLES = Object.freeze({
@@ -69,7 +75,7 @@ function failure(status, body) {
 }
 
 /**
- * deps: fetch(url, init) -> Response; sources() -> { openrouter: { key }, openai: { url, key }, google: { key }, eleven: { key } }
+ * deps: fetch(url, init) -> Response; sources() -> { openrouter: { key }, openai: { url, key }, openai2: { url, key }, google: { key }, eleven: { key } }
  * A voice here is { source, model, id, style }.
  */
 export function createRemote({ fetch, sources }) {
@@ -122,6 +128,23 @@ export function createRemote({ fetch, sources }) {
     return soundBlob(fromBase64(last.data), String(last.mime_type ?? last.mimeType ?? 'audio/pcm'), false);
   }
 
+  /** A Gemini voice model behind an own address: POST /v1beta/models/<model>:generateContent answers with the sound inside JSON. */
+  async function gemini(base, key, voice, text) {
+    // Measured: with this layout the description shapes the voice and is not read aloud; "Say in this style: …" was.
+    const script = voice.style
+      ? ['# AUDIO PROFILE', voice.style, '', '# DIRECTOR NOTES', 'Speak only the transcript below. Never speak this profile or these notes.', '', '# TRANSCRIPT', text].join('\n')
+      : text;
+    const root = base.replace(/\/v1(beta)?$/i, '');
+    const response = await checked(await call(`${root}/v1beta/models/${encodeURIComponent(voice.model)}:generateContent`, json(key ? { Authorization: `Bearer ${key}` } : {}, {
+      contents: [{ parts: [{ text: script }] }],
+      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice.id || GOOGLE_DEFAULT_VOICE } } } },
+    })));
+    const data = await response.json().catch(() => null);
+    const sound = (data?.candidates ?? []).flatMap(item => item?.content?.parts ?? []).map(part => part?.inlineData ?? part?.inline_data).find(item => item?.data);
+    if (!sound) throw new Error('noaudio');
+    return soundBlob(fromBase64(sound.data), String(sound.mimeType ?? sound.mime_type ?? 'audio/pcm'), false);
+  }
+
   async function eleven(key, voice, text) {
     if (!voice.id) throw new Error('novoiceid');
     const response = await checked(await call(`${ELEVEN_URL}/v1/text-to-speech/${encodeURIComponent(voice.id)}?output_format=mp3_44100_128`,
@@ -132,11 +155,11 @@ export function createRemote({ fetch, sources }) {
   function synth(voice, text) {
     const config = sources()?.[voice.source] ?? {};
     const key = String(config.key ?? '').trim();
-    if (voice.source === 'openai') {
+    if (OWN_SOURCES.includes(voice.source)) {
       const base = trimUrl(config.url);
       if (!base) throw new Error('nourl');
       // A home server may need no key at all.
-      return speech(base, key, voice, text);
+      return isGeminiVoice(voice.model) ? gemini(base, key, voice, text) : speech(base, key, voice, text);
     }
     if (!key) throw new Error('nokey');
     if (voice.source === 'openrouter') return speech(OPENROUTER_URL, key, voice, text);
@@ -196,6 +219,16 @@ export function createRemote({ fetch, sources }) {
         if (found.length) ids = found;
       } catch { /* the built-in list is enough */ }
       return { models: ids.map(id => ({ id, name: id, voices })) };
+    }
+    if (OWN_SOURCES.includes(source)) {
+      const base = trimUrl(sources()?.[source]?.url);
+      if (!base) return { models: [] };
+      const response = await checked(await call(`${base}/models`, { method: 'GET', headers: key ? { Authorization: `Bearer ${key}` } : {} }));
+      const data = await response.json();
+      const kinds = model => [].concat(model?.supported_endpoint_types ?? []).join(' ');
+      const ids = (data?.data ?? []).filter(model => model?.id && (/tts/i.test(model.id) || /text.to.speech|tts/i.test(kinds(model)))).map(model => String(model.id)).sort((a, b) => a.localeCompare(b));
+      const voices = id => (isGeminiVoice(id) ? GOOGLE_VOICES : isOpenAiVoice(id) ? OPENAI_VOICES : null)?.map(name => ({ id: name, name })) ?? null;
+      return { models: ids.map(id => ({ id, name: id, voices: voices(id) })) };
     }
     return { models: [] };
   }

@@ -1,7 +1,7 @@
 // Settings: defaults, ranges and one normaliser. Pure, no browser globals.
 
 export const KEY = 'sable_voice';
-export const VERSION = '0.3.0';
+export const VERSION = '0.6.0';
 
 export const VIEWS = Object.freeze(['float', 'bar-top', 'bar-bottom', 'side-left', 'side-right']);
 export const LANGUAGES = Object.freeze(['auto', 'ru', 'en']);
@@ -10,8 +10,11 @@ export const CARD_MODES = Object.freeze(['compact', 'full']);
 export const ASTERISK = Object.freeze(['thought', 'narration']);
 export const THOUGHT_VOICES = Object.freeze(['character', 'narrator']);
 // Where a voice comes from: the device itself, or a service on the internet (own key needed).
-export const SOURCES = Object.freeze(['device', 'openrouter', 'openai', 'google', 'eleven']);
+export const SOURCES = Object.freeze(['device', 'openrouter', 'openai', 'openai2', 'google', 'eleven']);
+// Sources that are just an address and a key: any server that answers like OpenAI's /audio/speech.
+export const OWN_SOURCES = Object.freeze(['openai', 'openai2']);
 export const SOURCE_DEFAULTS = Object.freeze({ openrouter: Object.freeze({ key: '' }), openai: Object.freeze({ url: 'https://api.openai.com/v1', key: '' }),
+  openai2: Object.freeze({ url: '', key: '' }),
   google: Object.freeze({ key: '' }), eleven: Object.freeze({ key: '' }) });
 
 // Tags whose whole content is never read aloud (trackers, checklists, plans, picture prompts).
