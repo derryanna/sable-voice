@@ -1,0 +1,13 @@
+{
+  "name": "sable-voice",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "SillyTavern extension: a voice player that reads replies aloud with separate narrator and character voices",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

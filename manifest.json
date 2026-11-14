@@ -1,0 +1,11 @@
+{
+    "display_name": "Sable Voice",
+    "loading_order": 110,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "derryanna",
+    "version": "0.3.0",
+    "homePage": "https://github.com/derryanna/sable-voice"
+}
