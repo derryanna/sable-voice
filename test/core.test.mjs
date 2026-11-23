@@ -346,6 +346,11 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
   const before = calls.length;
   await remote.audio({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: '' }, 'Again');
   assert.equal(calls.length, before + 1, 'the missing path is asked once per address');
+  await remote.audio({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: 'Low and calm.' }, 'Hello');
+  assert.equal(calls.at(-1).body.input, 'Hello', 'the description is not put into the text either');
+  assert.equal('instructions' in calls.at(-1).body, false, 'a separate description would be read aloud');
+  await remote.audio({ source: 'openai', model: 'tts-1', id: 'onyx', style: 'Low and calm.' }, 'Hello');
+  assert.equal(calls.at(-1).body.instructions, 'Low and calm.', 'other models keep the usual field');
   const own = await remote.catalog('openai2');
   assert.deepEqual(own.models.map(item => item.id), ['eleven_v3', 'gemini-3.8-flash-tts', 'gpt-4o-mini-tts'], 'only voice models are listed');
   assert.equal(own.models[1].voices.length, 30);

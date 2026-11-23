@@ -94,12 +94,20 @@ export function createRemote({ fetch, sources, onSynth }) {
   const json = (headers, body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   const trimUrl = url => String(url ?? '').trim().replace(/\/+$/, '');
 
+  // Measured: with this layout a Gemini voice model lets the description shape the voice and does not read it aloud; "Say in this style: …" was read.
+  const geminiScript = (voice, text) => (voice.style
+    ? ['# AUDIO PROFILE', voice.style, '', '# DIRECTOR NOTES', 'Speak only the transcript below. Never speak this profile or these notes.', '', '# TRANSCRIPT', text].join('\n')
+    : text);
+
   /** OpenRouter and every OpenAI-shaped address: POST /audio/speech answers with the sound itself. */
   async function speech(base, key, voice, text) {
     const model = voice.model || DEFAULT_MODELS[voice.source];
     if (!model) throw new Error('nomodel');
+    // Measured: a Gemini voice model behind an own address reads a separate `instructions` field aloud, and a description
+    // inside the text makes the voice drift more between phrases (even male/female), so here only the voice name is sent.
+    const bare = OWN_SOURCES.includes(voice.source) && isGeminiVoice(model);
     const send = format => call(`${base}/audio/speech`, json({ Authorization: `Bearer ${key}` },
-      { model, input: text, ...(voice.id ? { voice: voice.id } : {}), ...(voice.style ? { instructions: voice.style } : {}), response_format: format }));
+      { model, input: text, ...(voice.id ? { voice: voice.id } : {}), ...(voice.style && !bare ? { instructions: voice.style } : {}), response_format: format }));
     const tag = `${base}|${model}`;
     let format = pcmOnly.has(tag) ? 'pcm' : 'mp3';
     let response = await send(format);
@@ -132,10 +140,7 @@ export function createRemote({ fetch, sources, onSynth }) {
 
   /** A Gemini voice model behind an own address: POST /v1beta/models/<model>:generateContent answers with the sound inside JSON. */
   async function gemini(base, key, voice, text) {
-    // Measured: with this layout the description shapes the voice and is not read aloud; "Say in this style: …" was.
-    const script = voice.style
-      ? ['# AUDIO PROFILE', voice.style, '', '# DIRECTOR NOTES', 'Speak only the transcript below. Never speak this profile or these notes.', '', '# TRANSCRIPT', text].join('\n')
-      : text;
+    const script = geminiScript(voice, text);
     const root = base.replace(/\/v1(beta)?$/i, '');
     const response = await checked(await call(`${root}/v1beta/models/${encodeURIComponent(voice.model)}:generateContent`, json(key ? { Authorization: `Bearer ${key}` } : {}, {
       contents: [{ parts: [{ text: script }] }],
