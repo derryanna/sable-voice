@@ -1,7 +1,7 @@
 // Sable Voice: a player that reads tavern replies aloud. This file ties the pieces to the tavern page:
 // settings store, the phrases of a message, the voice source, the player and the settings section.
 
-import { KEY, createStore } from './src/settings.js';
+import { KEY, createStore, styleOf } from './src/settings.js';
 import { KIND, readMessage, rangeFor, chunkAt, detectLang } from './src/text.js';
 import { createEngine } from './src/engine.js';
 import { createDeviceProvider } from './src/providers/device.js';
@@ -43,7 +43,7 @@ function init() {
   let language = resolveLanguage(store.get().language, window);
   let tr = createTranslator(language);
   const provider = createDeviceProvider(window);
-  const remote = createRemote({ fetch: (url, init) => window.fetch(url, init), sources: () => store.get().sources, ownStyle: () => store.get().ownStyle, onSynth: () => count('internet') });
+  const remote = createRemote({ fetch: (url, init) => window.fetch(url, init), sources: () => store.get().sources, onSynth: () => count('internet') });
   const out = createAudioOut(window);
   const log = (...args) => { if (store.get().debug) console.log('[Sable Voice]', ...args); };
 
@@ -100,7 +100,7 @@ function init() {
     // A line tagged with another speaker takes that person's voice from the cast list.
     const chosen = (!narrator && pickCastVoice(settings.cast, name, who)) || (own?.source ? own : base);
     return {
-      source: chosen.source, model: chosen.model, id: chosen.id, style: chosen.style,
+      source: chosen.source, model: chosen.model, id: chosen.id, style: styleOf(chosen),
       voice: chosen.id,
       rate: Math.min(RATE_LIMITS[1], Math.max(RATE_LIMITS[0], base.rate * settings.speed)),
       pitch: base.pitch,
@@ -237,7 +237,7 @@ function init() {
     // A cast voice ('male', 'female', 'cast:N') is tried as it is; one without a source sounds like the common character voice.
     const cast = roleVoice(store.get(), charName(), role);
     const options = cast?.source
-      ? { ...voiceFor(false, '', ''), source: cast.source, model: cast.model, id: cast.id, voice: cast.id, style: cast.style }
+      ? { ...voiceFor(false, '', ''), source: cast.source, model: cast.model, id: cast.id, voice: cast.id, style: styleOf(cast) }
       : voiceFor(narrator, role === 'own' ? charName() : '', '');
     const chosen = options.source === 'device' && options.voice ? (await provider.voices()).find(voice => voice.id === options.voice) : null;
     const lang = chosen ? String(chosen.lang).slice(0, 2).toLowerCase() : language;

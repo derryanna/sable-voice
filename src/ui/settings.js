@@ -30,6 +30,7 @@ const pairHtml = (tr, field, key) => `<div class="sv-row sv-field" data-box="${f
 const voiceFieldsHtml = (tr, own) => `<div class="sv-row sv-field"><span class="sv-label">${esc(tr('voice.source'))}</span><select class="text_pole" data-f="source" aria-label="${esc(tr('voice.source'))}">${
     own ? `<option value="">${esc(tr('voice.same'))}</option>` : ''}${SOURCES.map(source => `<option value="${source}">${esc(tr(`source.${source}`))}</option>`).join('')}</select></div>
       ${pairHtml(tr, 'model', 'voice.model')}${pairHtml(tr, 'id', 'voice.voice')}
+      <label class="sv-row sv-check" data-box="describe"><input type="checkbox" data-f="describe"><span class="sv-label">${esc(tr('voice.describe'))}<small>${esc(tr('voice.describe.hint'))}</small></span></label>
       <div class="sv-row sv-field" data-box="style"><span class="sv-label">${esc(tr('voice.style'))}<small>${esc(tr('voice.style.hint'))}</small></span><textarea class="text_pole" data-f="style" rows="2" aria-label="${esc(tr('voice.style'))}"></textarea></div>
       <small class="sv-status" data-hint></small>`;
 /** A row of the cast list: name as the model writes it, the voice, a cross. */
@@ -91,7 +92,6 @@ function build(tr) {
           ${OWN_SOURCES.map(source => `${secret(source, 'url', `keys.${source}.url`)}${secret(source, 'key', `keys.${source}`)}`).join('')}
           <div class="sv-row sv-wide sv-note"><small>${esc(tr('keys.hint'))}</small></div>
         </div></details>
-        ${toggle('ownStyle', 'ownstyle', 'ownstyle.hint')}
         <small class="sv-status sv-wide" data-status="voices" role="status"></small>
         <div class="sv-row sv-wide sv-stats"><span data-stats></span></div>
         ${text('price', 'price', 'price.hint')}
@@ -219,7 +219,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
   /** A status line that stays until it is replaced. */
   const note = (name, message) => { const element = root.querySelector(`[data-status="${name}"]`); if (element) element.textContent = message; };
 
-  const EMPTY = Object.freeze({ source: '', model: '', id: '', style: '' });
+  const EMPTY = Object.freeze({ source: '', model: '', id: '', style: '', describe: true });
   const turns = {};
 
   function voiceOf(role) {
@@ -342,7 +342,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
       const own = settings.voices.byName[name];
       // No own voice yet: start from the common character voice, so only the description differs.
       const base = own?.source ? own : { ...EMPTY, source: settings.voices.character.source, model: settings.voices.character.model, id: settings.voices.character.id };
-      store.set('voices.byName', { ...settings.voices.byName, [name]: { ...base, style } });
+      store.set('voices.byName', { ...settings.voices.byName, [name]: { ...base, style, describe: true } });
       note('voices', tr(base.source === 'device' ? 'voice.suggest.device' : 'voice.suggest.done'));
     } catch {
       note('voices', tr('voice.suggest.fail'));
@@ -379,7 +379,10 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
 
     for (const element of card.querySelectorAll('[data-f]')) element.disabled = locked;
     field('source').value = source;
-    box('style', !!source && source !== 'device');
+    const internet = !!source && source !== 'device';
+    box('describe', internet);
+    field('describe').checked = voice.describe !== false;
+    box('style', internet && voice.describe !== false);
     box('pitch', source === 'device');
     const style = field('style');
     if (style !== active) style.value = voice.style ?? '';
@@ -592,6 +595,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
         paint(role).then(() => element.parentElement.querySelector('[data-kind="text"]')?.focus());
         return;
       }
+      if (element.dataset.f === 'describe') { setVoice(role, 'describe', element.checked); return; }
       byHand.delete(role);
       setVoice(role, element.dataset.f, element.value.trim());
     }

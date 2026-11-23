@@ -34,7 +34,10 @@ export const BG_IMAGE_MAX_LENGTH = 900 * 1024;
 
 export const RANGES = Object.freeze({ volume: [0, 1, 0.05], speed: [0.5, 2, 0.05], pauseMs: [0, 1500, 50], chunkChars: [80, 400, 10] });
 export const VOICE_RANGES = Object.freeze({ rate: [0.5, 2, 0.05], pitch: [0, 2, 0.05] });
-export const VOICE_DEFAULTS = Object.freeze({ source: 'device', model: '', id: '', style: '', rate: 1, pitch: 1 });
+// `describe` off = the description stays saved but is not sent: only the voice name goes out (steadier on some models).
+export const VOICE_DEFAULTS = Object.freeze({ source: 'device', model: '', id: '', style: '', describe: true, rate: 1, pitch: 1 });
+/** The description that really goes out with a voice. */
+export const styleOf = voice => (voice?.describe === false ? '' : voice?.style ?? '');
 // An optional voice: no source = «same as the character voice».
 export const CAST_VOICE = Object.freeze({ ...VOICE_DEFAULTS, source: '' });
 
@@ -55,8 +58,6 @@ export const DEFAULTS = Object.freeze({
   stats: Object.freeze({ day: '', phrases: 0, internet: 0 }),
   price: '',
   download: false,
-  // Own addresses: send the voice description. Off = only the voice name (steadier voice on some models).
-  ownStyle: true,
   visual: VISUAL_DEFAULTS,
   // Places as fractions of the window, so they survive a rotated phone: fab/card = centre point, side = height.
   pos: Object.freeze({ fab: null, card: null, side: 0.5 }),
@@ -108,7 +109,7 @@ export function normalizeVoice(raw, fallback = VOICE_DEFAULTS, own = false) {
   const id = text(source.id, fallback.id, 300);
   // A choice saved before sources existed is a voice of the device.
   const from = own ? pick(source.source, ['', ...SOURCES], id ? 'device' : '') : pick(source.source, SOURCES, fallback.source);
-  return { source: from, model: text(source.model, fallback.model, 200).trim(), id, style: text(source.style, fallback.style, 500),
+  return { source: from, model: text(source.model, fallback.model, 200).trim(), id, style: text(source.style, fallback.style, 500), describe: bool(source.describe, true),
     rate: clamp(source.rate, VOICE_RANGES.rate, fallback.rate), pitch: clamp(source.pitch, VOICE_RANGES.pitch, fallback.pitch) };
 }
 
@@ -178,7 +179,6 @@ export function normalize(raw) {
     stats: { day: text(stats.day, '', 10), phrases: count(stats.phrases), internet: count(stats.internet) },
     price: text(source.price, '', 20).trim(),
     download: bool(source.download, false),
-    ownStyle: bool(source.ownStyle, true),
     visual: normalizeVisual(source.visual),
     pos: { fab: point(pos.fab), card: point(pos.card), side: clamp(pos.side, [0.08, 0.92, 0], DEFAULTS.pos.side) },
     debug: bool(source.debug, false),

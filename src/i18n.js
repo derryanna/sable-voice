@@ -30,7 +30,7 @@ const RU = {
 
   'read.narration': 'Нарратор — текст вне кавычек', 'read.speech': 'Реплики — текст в кавычках', 'read.thoughts': 'Мысли — курсив',
   'read.user': 'Мои сообщения тоже',
-  'ownstyle': 'Свой адрес: отправлять описание голоса', 'ownstyle.hint': 'Выключи, если голос скачет между фразами: тогда уходит только имя голоса.',
+  'voice.describe': 'Добавить описание', 'voice.describe.hint': 'Выключи, если голос скачет между фразами: тогда уходит только имя голоса.',
   'asterisk': 'Курсив и *звёздочки* — это', 'asterisk.thought': 'Мысли персонажа', 'asterisk.narration': 'Действия (читает нарратор)',
 
   'err.nokey': 'Нет ключа — впиши его в «Ключи»', 'err.key': 'Ключ не подошёл', 'err.credits': 'Баланс сервиса пуст',
@@ -122,7 +122,7 @@ const EN = {
 
   'read.narration': 'Narrator — text outside quotes', 'read.speech': 'Dialogue — text in quotes', 'read.thoughts': 'Thoughts — italics',
   'read.user': 'My messages too',
-  'ownstyle': 'Own address: send the voice description', 'ownstyle.hint': 'Switch off if the voice jumps between phrases: then only the voice name is sent.',
+  'voice.describe': 'Add a description', 'voice.describe.hint': 'Switch off if the voice jumps between phrases: then only the voice name is sent.',
   'asterisk': 'Italics and *asterisks* are', 'asterisk.thought': 'The character\'s thoughts', 'asterisk.narration': 'Actions (the narrator reads them)',
 
   'err.nokey': 'No key — add it under “Keys”', 'err.key': 'The key was not accepted', 'err.credits': 'The service balance is empty',

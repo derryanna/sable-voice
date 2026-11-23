@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { normalize, DEFAULTS, setPath, getPath, createStore, cleanImage } from '../src/settings.js';
+import { normalize, DEFAULTS, setPath, getPath, createStore, cleanImage, normalizeVoice, styleOf } from '../src/settings.js';
 import { KIND, readMessage, readDom, applyRules, buildChunks, splitRun, speakable, rangeFor, chunkAt, detectLang, parsePatterns } from '../src/text.js';
 import { createEngine } from '../src/engine.js';
 import { pickVoice } from '../src/providers/device.js';
@@ -303,8 +303,7 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
     if (url.includes('/v1/text-to-speech/')) return answer(200, new Uint8Array([7, 7]), 'audio/mpeg');
     return answer(404, 'nope');
   };
-  let sendStyle = true;
-  const remote = createRemote({ fetch, sources: () => config, ownStyle: () => sendStyle });
+  const remote = createRemote({ fetch, sources: () => config });
 
   const fish = { source: 'openrouter', model: '', id: '', style: 'A low male voice.' };
   const first = await remote.audio(fish, 'Привет');
@@ -350,12 +349,12 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
   await remote.audio({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: 'Low and calm.' }, 'Hello');
   assert.equal(calls.at(-1).body.input, 'Hello');
   assert.equal(calls.at(-1).body.instructions, 'Low and calm.', 'the description goes out by default');
-  sendStyle = false;
-  await remote.audio({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: 'Low and calm.' }, 'Hello once more');
-  assert.equal('instructions' in calls.at(-1).body, false, 'switched off: an own address gets only the voice name');
-  await remote.audio(fish, 'Hello again');
-  assert.equal(calls.at(-1).body.instructions, 'A low male voice.', 'the switch is for own addresses only');
-  sendStyle = true;
+  const quiet = normalizeVoice({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: 'Low and calm.', describe: false });
+  assert.equal(quiet.style, 'Low and calm.', 'switched off: the description stays saved');
+  assert.equal(styleOf(quiet), '', 'but it is not sent');
+  await remote.audio({ ...quiet, style: styleOf(quiet) }, 'Hello once more');
+  assert.equal('instructions' in calls.at(-1).body, false, 'only the voice name goes out');
+  assert.equal(normalizeVoice({ source: 'openai', style: 'x' }).describe, true, 'a voice saved before the switch still sends it');
   const own = await remote.catalog('openai2');
   assert.deepEqual(own.models.map(item => item.id), ['eleven_v3', 'gemini-3.8-flash-tts', 'gpt-4o-mini-tts'], 'only voice models are listed');
   assert.equal(own.models[1].voices.length, 30);

@@ -78,9 +78,8 @@ function failure(status, body) {
 /**
  * deps: fetch(url, init) -> Response; sources() -> { openrouter: { key }, openai: { url, key }, openai2: { url, key }, google: { key }, eleven: { key } }
  * A voice here is { source, model, id, style }.
- * ownStyle() -> false: the description is not sent to own addresses (there it can make the voice drift between phrases).
  */
-export function createRemote({ fetch, sources, onSynth, ownStyle = () => true }) {
+export function createRemote({ fetch, sources, onSynth }) {
   const cache = new Map();
   const lists = new Map();
   const pcmOnly = new Set();
@@ -180,8 +179,7 @@ export function createRemote({ fetch, sources, onSynth, ownStyle = () => true })
   }
 
   /** The sound of a phrase, made once: the same phrase with the same voice comes from memory. */
-  function audio(spoken, text) {
-    const voice = OWN_SOURCES.includes(spoken.source) && !ownStyle() ? { ...spoken, style: '' } : spoken;
+  function audio(voice, text) {
     const config = sources()?.[voice.source] ?? {};
     const id = JSON.stringify([voice.source, config.url ?? '', voice.model ?? '', voice.id ?? '', voice.style ?? '', text]);
     const kept = cache.get(id);
