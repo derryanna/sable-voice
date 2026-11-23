@@ -55,6 +55,8 @@ export const DEFAULTS = Object.freeze({
   stats: Object.freeze({ day: '', phrases: 0, internet: 0 }),
   price: '',
   download: false,
+  // Own addresses: send the voice description. Off = only the voice name (steadier voice on some models).
+  ownStyle: true,
   visual: VISUAL_DEFAULTS,
   // Places as fractions of the window, so they survive a rotated phone: fab/card = centre point, side = height.
   pos: Object.freeze({ fab: null, card: null, side: 0.5 }),
@@ -176,6 +178,7 @@ export function normalize(raw) {
     stats: { day: text(stats.day, '', 10), phrases: count(stats.phrases), internet: count(stats.internet) },
     price: text(source.price, '', 20).trim(),
     download: bool(source.download, false),
+    ownStyle: bool(source.ownStyle, true),
     visual: normalizeVisual(source.visual),
     pos: { fab: point(pos.fab), card: point(pos.card), side: clamp(pos.side, [0.08, 0.92, 0], DEFAULTS.pos.side) },
     debug: bool(source.debug, false),

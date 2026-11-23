@@ -43,7 +43,7 @@ function init() {
   let language = resolveLanguage(store.get().language, window);
   let tr = createTranslator(language);
   const provider = createDeviceProvider(window);
-  const remote = createRemote({ fetch: (url, init) => window.fetch(url, init), sources: () => store.get().sources, onSynth: () => count('internet') });
+  const remote = createRemote({ fetch: (url, init) => window.fetch(url, init), sources: () => store.get().sources, ownStyle: () => store.get().ownStyle, onSynth: () => count('internet') });
   const out = createAudioOut(window);
   const log = (...args) => { if (store.get().debug) console.log('[Sable Voice]', ...args); };
 

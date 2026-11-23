@@ -91,6 +91,7 @@ function build(tr) {
           ${OWN_SOURCES.map(source => `${secret(source, 'url', `keys.${source}.url`)}${secret(source, 'key', `keys.${source}`)}`).join('')}
           <div class="sv-row sv-wide sv-note"><small>${esc(tr('keys.hint'))}</small></div>
         </div></details>
+        ${toggle('ownStyle', 'ownstyle', 'ownstyle.hint')}
         <small class="sv-status sv-wide" data-status="voices" role="status"></small>
         <div class="sv-row sv-wide sv-stats"><span data-stats></span></div>
         ${text('price', 'price', 'price.hint')}

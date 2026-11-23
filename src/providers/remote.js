@@ -78,8 +78,9 @@ function failure(status, body) {
 /**
  * deps: fetch(url, init) -> Response; sources() -> { openrouter: { key }, openai: { url, key }, openai2: { url, key }, google: { key }, eleven: { key } }
  * A voice here is { source, model, id, style }.
+ * ownStyle() -> false: the description is not sent to own addresses (there it can make the voice drift between phrases).
  */
-export function createRemote({ fetch, sources, onSynth }) {
+export function createRemote({ fetch, sources, onSynth, ownStyle = () => true }) {
   const cache = new Map();
   const lists = new Map();
   const pcmOnly = new Set();
@@ -103,11 +104,8 @@ export function createRemote({ fetch, sources, onSynth }) {
   async function speech(base, key, voice, text) {
     const model = voice.model || DEFAULT_MODELS[voice.source];
     if (!model) throw new Error('nomodel');
-    // Measured: a Gemini voice model behind an own address reads a separate `instructions` field aloud, and a description
-    // inside the text makes the voice drift more between phrases (even male/female), so here only the voice name is sent.
-    const bare = OWN_SOURCES.includes(voice.source) && isGeminiVoice(model);
     const send = format => call(`${base}/audio/speech`, json({ Authorization: `Bearer ${key}` },
-      { model, input: text, ...(voice.id ? { voice: voice.id } : {}), ...(voice.style && !bare ? { instructions: voice.style } : {}), response_format: format }));
+      { model, input: text, ...(voice.id ? { voice: voice.id } : {}), ...(voice.style ? { instructions: voice.style } : {}), response_format: format }));
     const tag = `${base}|${model}`;
     let format = pcmOnly.has(tag) ? 'pcm' : 'mp3';
     let response = await send(format);
@@ -182,7 +180,8 @@ export function createRemote({ fetch, sources, onSynth }) {
   }
 
   /** The sound of a phrase, made once: the same phrase with the same voice comes from memory. */
-  function audio(voice, text) {
+  function audio(spoken, text) {
+    const voice = OWN_SOURCES.includes(spoken.source) && !ownStyle() ? { ...spoken, style: '' } : spoken;
     const config = sources()?.[voice.source] ?? {};
     const id = JSON.stringify([voice.source, config.url ?? '', voice.model ?? '', voice.id ?? '', voice.style ?? '', text]);
     const kept = cache.get(id);
