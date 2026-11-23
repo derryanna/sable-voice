@@ -23,6 +23,7 @@ const FORMATS = {
 
 const testButtonHtml = (tr, role) => `<button type="button" class="menu_button sv-test" data-test="${role}"><i class="fa-solid fa-volume-high" aria-hidden="true"></i> ${esc(tr('voice.test'))}</button>`;
 // One voice = where it comes from, which model, which voice, and (for internet voices) how it should sound.
+const HAND = '__hand';
 const pairHtml = (tr, field, key) => `<div class="sv-row sv-field" data-box="${field}"><span class="sv-label">${esc(tr(key))}</span>`
   + `<select class="text_pole" data-f="${field}" data-kind="list" aria-label="${esc(tr(key))}"></select>`
   + `<input type="text" class="text_pole" data-f="${field}" data-kind="text" aria-label="${esc(tr(key))}" spellcheck="false"></div>`;
@@ -202,6 +203,7 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
 
   let voices = [];
   let voicesLoaded = false;
+  const byHand = new Set();
   const openGroups = new Set(['player']);
   const timers = new Set();
 
@@ -393,7 +395,10 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
       if (turn !== turns[role] || !card.isConnected || !list?.models.length) return;
       show('model', 'list', options(list.models, tr('voice.pick')), voice.model);
       const voices = list.models.find(item => item.id === voice.model)?.voices;
-      if (voices?.length) show('id', 'list', options(voices, tr('voice.default')), voice.id);
+      if (!voices?.length) return;
+      // A voice the list does not know (the address has its own names) is typed by hand; an empty field brings the list back.
+      if (byHand.has(role) || (voice.id && !voices.some(item => item.id === voice.id))) { show('id', 'text', '', voice.id); hint(tr('hint.hand')); }
+      else show('id', 'list', `${options(voices, tr('voice.default'))}<option value="${HAND}">${esc(tr('voice.hand'))}</option>`, voice.id);
       return;
     }
 
@@ -579,7 +584,16 @@ export function mountSettings({ document, window, store, t, uiLanguage, provider
       if (element.dataset.svSource) remote.forget(element.dataset.svSource);
       setValue(element);
     }
-    else if (element.matches('[data-f]')) setVoice(element.closest('.sv-voice')?.dataset.role, element.dataset.f, element.value.trim());
+    else if (element.matches('[data-f]')) {
+      const role = element.closest('.sv-voice')?.dataset.role;
+      if (element.dataset.f === 'id' && element.value === HAND) {
+        byHand.add(role);
+        paint(role).then(() => element.parentElement.querySelector('[data-kind="text"]')?.focus());
+        return;
+      }
+      byHand.delete(role);
+      setVoice(role, element.dataset.f, element.value.trim());
+    }
     else if (element.matches('[data-cast-name]')) setCastName(Number(element.dataset.castName), element.value);
     else if (element.matches('[data-bg-link]')) {
       const value = element.value.trim();

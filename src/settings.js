@@ -1,7 +1,7 @@
 // Settings: defaults, ranges and one normaliser. Pure, no browser globals.
 
 export const KEY = 'sable_voice';
-export const VERSION = '0.7.0';
+export const VERSION = '0.7.2';
 
 export const VIEWS = Object.freeze(['float', 'bar-top', 'bar-bottom', 'side-left', 'side-right']);
 export const LANGUAGES = Object.freeze(['auto', 'ru', 'en']);

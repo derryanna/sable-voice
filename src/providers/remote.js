@@ -83,6 +83,7 @@ export function createRemote({ fetch, sources, onSynth }) {
   const cache = new Map();
   const lists = new Map();
   const pcmOnly = new Set();
+  const speechOnly = new Set();
 
   async function call(url, init) {
     let response;
@@ -160,7 +161,13 @@ export function createRemote({ fetch, sources, onSynth }) {
       const base = trimUrl(config.url);
       if (!base) throw new Error('nourl');
       // A home server may need no key at all.
-      return isGeminiVoice(voice.model) ? gemini(base, key, voice, text) : speech(base, key, voice, text);
+      if (!isGeminiVoice(voice.model) || speechOnly.has(base)) return speech(base, key, voice, text);
+      // Some addresses serve Gemini voice models only through /audio/speech: the Gemini path is not there (404).
+      return gemini(base, key, voice, text).catch(error => {
+        if (!/^404\b/.test(error?.message ?? '')) throw error;
+        speechOnly.add(base);
+        return speech(base, key, voice, text);
+      });
     }
     if (!key) throw new Error('nokey');
     if (voice.source === 'openrouter') return speech(OPENROUTER_URL, key, voice, text);

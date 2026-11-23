@@ -298,6 +298,7 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
       return answer(200, new Uint8Array([9, 9, 9]), 'audio/mpeg');
     }
     if (url.endsWith('/v1/models')) return answer(200, JSON.stringify({ data: [{ id: 'chat-big' }, { id: 'gemini-3.8-flash-tts' }, { id: 'gpt-4o-mini-tts' }, { id: 'eleven_v3', supported_endpoint_types: ['Text to speech'] }] }));
+    if (url.endsWith(':generateContent') && url.includes('plain.example')) return answer(404, '404 page not found');
     if (url.endsWith(':generateContent')) return answer(200, JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/wav', data: 'UklGRgAAAABXQVZFZm10IA==' } }] } }] }));
     if (url.includes('/v1/text-to-speech/')) return answer(200, new Uint8Array([7, 7]), 'audio/mpeg');
     return answer(404, 'nope');
@@ -337,6 +338,14 @@ test('remote: OpenRouter speech, the pcm retry, the cache and plain error words'
   assert.equal(calls.at(-1).body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Charon');
   assert.match(calls.at(-1).body.contents[0].parts[0].text, /^# AUDIO PROFILE\nLow and calm\.\n[^]*# TRANSCRIPT\nHello$/);
   assert.equal(gem.type, 'audio/wav');
+  config.openai = { url: 'https://plain.example/v1', key: 'k3' };
+  const plain = await remote.audio({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: '' }, 'Hello');
+  assert.equal(calls.at(-1).url, 'https://plain.example/v1/audio/speech', 'no Gemini path at the address: the same phrase goes the usual way');
+  assert.equal(calls.at(-1).body.voice, 'Orus');
+  assert.equal(plain.type, 'audio/mpeg');
+  const before = calls.length;
+  await remote.audio({ source: 'openai', model: 'google/gemini-3.8-flash-tts', id: 'Orus', style: '' }, 'Again');
+  assert.equal(calls.length, before + 1, 'the missing path is asked once per address');
   const own = await remote.catalog('openai2');
   assert.deepEqual(own.models.map(item => item.id), ['eleven_v3', 'gemini-3.8-flash-tts', 'gpt-4o-mini-tts'], 'only voice models are listed');
   assert.equal(own.models[1].voices.length, 30);
